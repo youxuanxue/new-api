@@ -65,4 +65,7 @@ const (
 
 	// ContextKeyLanguage stores the user's language preference for i18n
 	ContextKeyLanguage ContextKey = "language"
+
+	// ContextKeyParamCorrection stores the parameter correction result
+	ContextKeyParamCorrection ContextKey = "param_correction"
 )
