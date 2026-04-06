@@ -3,9 +3,13 @@
 package middleware
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"math"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +18,8 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -214,6 +220,29 @@ func (sc *SemanticCache) GetCachedResponse(c *gin.Context, request *dto.GeneralO
 	// 需要实现向量嵌入和相似度计算
 	// 当前版本仅支持精确匹配
 
+	// 语义相似度匹配
+	if len(sc.entries) > 0 {
+		// 计算当前请求的嵌入向量（仅当需要语义匹配时）
+		requestEmbedding, err := sc.computeEmbedding(c, request)
+		if err == nil && len(requestEmbedding) > 0 {
+			// 遍历缓存寻找相似请求
+			for _, entry := range sc.entries {
+				if entry.Model != request.Model {
+					continue
+				}
+				if len(entry.Embedding) > 0 && !entry.ExpiresAt.Before(time.Now()) {
+					similarity := cosineSimilarity(requestEmbedding, entry.Embedding)
+					if similarity >= sc.config.SimilarityThreshold {
+						entry.HitCount++
+						sc.hitCount++
+						logger.LogInfo(c, "[SemanticCache] Semantic match hit for model %s (similarity: %.2f)", request.Model, similarity)
+						return entry, true
+					}
+				}
+			}
+		}
+	}
+
 	sc.missCount++
 	return nil, false
 }
@@ -250,6 +279,13 @@ func (sc *SemanticCache) SetCachedResponse(c *gin.Context, request *dto.GeneralO
 		CreatedAt:   time.Now(),
 		ExpiresAt:   time.Now().Add(time.Duration(sc.config.TTL) * time.Second),
 		HitCount:    0,
+		Messages:    buildMessagesText(request.Messages),
+	}
+
+	// 计算并存储 embedding（用于语义匹配）
+	embedding, err := sc.computeEmbedding(c, request)
+	if err == nil && len(embedding) > 0 {
+		entry.Embedding = embedding
 	}
 
 	sc.entries[entry.Key] = entry
@@ -319,6 +355,134 @@ func float64Value(p *float64) float64 {
 		return 0
 	}
 	return *p
+}
+
+// computeEmbedding 计算请求的嵌入向量
+func (sc *SemanticCache) computeEmbedding(c *gin.Context, request *dto.GeneralOpenAIRequest) ([]float32, error) {
+	// 构建用于计算嵌入的文本
+	text := buildMessagesText(request.Messages)
+	if text == "" {
+		return nil, fmt.Errorf("empty messages")
+	}
+
+	// 调用嵌入模型 API
+	embedding, err := sc.callEmbeddingAPI(c, text)
+	if err != nil {
+		return nil, err
+	}
+
+	return embedding, nil
+}
+
+// buildMessagesText 从消息列表构建文本
+func buildMessagesText(messages []dto.Message) string {
+	var sb strings.Builder
+	for _, msg := range messages {
+		sb.WriteString(msg.Role)
+		sb.WriteString(": ")
+		sb.WriteString(getContentString(msg.Content))
+		sb.WriteString(" ")
+	}
+	return sb.String()
+}
+
+// callEmbeddingAPI 调用嵌入 API 获取向量
+func (sc *SemanticCache) callEmbeddingAPI(c *gin.Context, text string) ([]float32, error) {
+	// 使用配置的嵌入模型
+	embeddingModel := sc.config.EmbeddingModel
+	if embeddingModel == "" {
+		embeddingModel = "text-embedding-3-small"
+	}
+
+	// 获取可用的渠道
+	channel, err := model.GetChannel("default", embeddingModel, 0)
+	if err != nil || channel == nil {
+		return nil, fmt.Errorf("no available channel for embedding model: %w", err)
+	}
+
+	// 获取 API 密钥
+	apiKey, _, err := channel.GetNextEnabledKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API key: %w", err)
+	}
+
+	// 构建上游 URL
+	baseURL := channel.GetBaseURL()
+	upstreamURL := fmt.Sprintf("%s/v1/embeddings", strings.TrimSuffix(baseURL, "/"))
+
+	// 构建请求体
+	reqBody := map[string]interface{}{
+		"model": embeddingModel,
+		"input": text,
+	}
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// 创建 HTTP 请求
+	req, err := http.NewRequestWithContext(c.Request.Context(), "POST", upstreamURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+
+	// 发送请求
+	client := service.GetHttpClient()
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	// 解析响应
+	var embeddingResp struct {
+		Data []struct {
+			Embedding []float64 `json:"embedding"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&embeddingResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if len(embeddingResp.Data) == 0 {
+		return nil, fmt.Errorf("no embedding in response")
+	}
+
+	// 转换为 float32
+	embedding := make([]float32, len(embeddingResp.Data[0].Embedding))
+	for i, v := range embeddingResp.Data[0].Embedding {
+		embedding[i] = float32(v)
+	}
+
+	return embedding, nil
+}
+
+// cosineSimilarity 计算余弦相似度
+func cosineSimilarity(a, b []float32) float64 {
+	if len(a) != len(b) {
+		return 0
+	}
+
+	var dotProduct, normA, normB float64
+	for i := range a {
+		dotProduct += float64(a[i]) * float64(b[i])
+		normA += float64(a[i]) * float64(a[i])
+		normB += float64(b[i]) * float64(b[i])
+	}
+
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+
+	return dotProduct / (math.Sqrt(normA) * math.Sqrt(normB))
 }
 
 // SemanticCacheMiddleware 语义缓存中间件

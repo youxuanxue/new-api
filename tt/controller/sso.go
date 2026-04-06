@@ -3,10 +3,19 @@
 package controller
 
 import (
+	"context"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +23,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	ttmodel "github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // ========== 企业 SSO（V2.0功能） ==========
@@ -236,6 +246,26 @@ type OIDCCallbackRequest struct {
 	State string `json:"state"`
 }
 
+// OIDCTokenResponse OIDC Token 响应
+type OIDCTokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	IdToken      string `json:"id_token"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+}
+
+// OIDCUserInfo OIDC 用户信息
+type OIDCUserInfo struct {
+	Sub           string `json:"sub"`
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
+	Name          string `json:"name"`
+	GivenName     string `json:"given_name"`
+	FamilyName    string `json:"family_name"`
+	Picture       string `json:"picture"`
+}
+
 // HandleOIDCCallback 处理 OIDC 回调
 func HandleOIDCCallback(c *gin.Context) {
 	code := c.Query("code")
@@ -246,22 +276,195 @@ func HandleOIDCCallback(c *gin.Context) {
 		return
 	}
 
-	// TODO: 验证 state
-	_ = state
+	// 从 state 中恢复 provider 信息
+	providerName, redirect, err := parseState(state)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid state"})
+		return
+	}
 
-	// TODO: 使用 code 换取 token
-	// TODO: 获取用户信息
-	// TODO: 创建或更新用户
+	// 获取 SSO 配置
+	config, err := ttmodel.GetSSOConfigByProvider(ttmodel.SSOProvider(providerName))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "SSO provider not found"})
+		return
+	}
 
-	// 简化实现：返回模拟响应
+	// 使用 code 换取 token
+	tokenResp, err := exchangeCodeForToken(c.Request.Context(), config, code)
+	if err != nil {
+		logger.LogError(c, "[OIDC] Failed to exchange code: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to exchange code for token"})
+		return
+	}
+
+	// 获取用户信息
+	userInfo, err := fetchOIDCUserInfo(c.Request.Context(), config, tokenResp.AccessToken)
+	if err != nil {
+		logger.LogError(c, "[OIDC] Failed to fetch user info: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user info"})
+		return
+	}
+
+	// 检查邮箱域名是否允许
+	if !config.IsEmailAllowedForSSO(userInfo.Email) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "email domain not allowed"})
+		return
+	}
+
+	// 创建或更新用户
+	user, err := createOrUpdateSSOUser(config, userInfo)
+	if err != nil {
+		logger.LogError(c, "[OIDC] Failed to create/update user: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create or update user"})
+		return
+	}
+
+	// 生成 JWT token
+	token, expiresAt, err := generateUserToken(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
+
+	// 如果有 redirect，重定向到目标页面
+	if redirect != "" {
+		redirectUrl := fmt.Sprintf("%s?token=%s&expires_at=%d", redirect, token, expiresAt)
+		c.Redirect(http.StatusTemporaryRedirect, redirectUrl)
+		return
+	}
+
 	c.JSON(http.StatusOK, ttmodel.SSOLoginResponse{
 		Success:   true,
-		Token:     "mock_token_" + common.GetRandomString(32),
-		UserId:    1,
-		Email:     "user@example.com",
-		ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+		Token:     token,
+		UserId:    user.Id,
+		Email:     userInfo.Email,
+		ExpiresAt: expiresAt,
 		Message:   "Login successful",
 	})
+}
+
+// exchangeCodeForToken 使用 authorization code 换取 access token
+func exchangeCodeForToken(ctx context.Context, config *ttmodel.SSOConfig, code string) (*OIDCTokenResponse, error) {
+	// 构建请求
+	data := url.Values{}
+	data.Set("grant_type", "authorization_code")
+	data.Set("code", code)
+	data.Set("redirect_uri", config.RedirectUrl)
+	data.Set("client_id", config.ClientId)
+	data.Set("client_secret", config.ClientSecret)
+
+	// 发送请求
+	req, err := http.NewRequestWithContext(ctx, "POST", config.TokenUrl, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("token request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("token request returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResp OIDCTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return nil, fmt.Errorf("failed to decode token response: %w", err)
+	}
+
+	return &tokenResp, nil
+}
+
+// fetchOIDCUserInfo 获取 OIDC 用户信息
+func fetchOIDCUserInfo(ctx context.Context, config *ttmodel.SSOConfig, accessToken string) (*OIDCUserInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", config.UserInfoUrl, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user info request: %w", err)
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("user info request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("user info request returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var userInfo OIDCUserInfo
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		return nil, fmt.Errorf("failed to decode user info: %w", err)
+	}
+
+	return &userInfo, nil
+}
+
+// createOrUpdateSSOUser 创建或更新 SSO 用户
+func createOrUpdateSSOUser(config *ttmodel.SSOConfig, userInfo *OIDCUserInfo) (*ttmodel.User, error) {
+	// 查找现有用户
+	var user ttmodel.User
+	result := ttmodel.DB.Where("email = ?", userInfo.Email).First(&user)
+
+	if result.Error != nil {
+		// 用户不存在，创建新用户
+		if config.JitCreateUser {
+			user = ttmodel.User{
+				Username:    userInfo.Email,
+				Email:       userInfo.Email,
+				DisplayName: userInfo.Name,
+				Group:       config.DefaultGroup,
+				Status:      common.UserStatusEnabled,
+			}
+			if err := ttmodel.DB.Create(&user).Error; err != nil {
+				return nil, fmt.Errorf("failed to create user: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("user not found and JIT creation is disabled")
+		}
+	} else {
+		// 更新现有用户信息
+		updates := map[string]interface{}{}
+		if userInfo.Name != "" && user.DisplayName != userInfo.Name {
+			updates["display_name"] = userInfo.Name
+		}
+		if len(updates) > 0 {
+			if err := ttmodel.DB.Model(&user).Updates(updates).Error; err != nil {
+				return nil, fmt.Errorf("failed to update user: %w", err)
+			}
+		}
+	}
+
+	return &user, nil
+}
+
+// generateUserToken 生成用户 JWT token
+func generateUserToken(user *ttmodel.User) (string, int64, error) {
+	expiresAt := time.Now().Add(24 * time.Hour).Unix()
+
+	claims := jwt.MapClaims{
+		"user_id": user.Id,
+		"email":   user.Email,
+		"exp":     expiresAt,
+		"iat":     time.Now().Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(common.GetEnvOrDefault("JWT_SECRET", "tokenkey-default-secret")))
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to sign token: %w", err)
+	}
+
+	return tokenString, expiresAt, nil
 }
 
 // HandleSAMLCallback 处理 SAML 回调
@@ -281,14 +484,110 @@ func HandleSAMLCallback(c *gin.Context) {
 
 	logger.LogInfo(c, "[SAML] Received response: %s", string(decoded))
 
-	// TODO: 解析 SAML Response
-	// TODO: 验证签名
-	// TODO: 提取用户信息
+	// 解析 SAML Response
+	samlResp, err := parseSAMLResponse(decoded)
+	if err != nil {
+		logger.LogError(c, "[SAML] Failed to parse response: "+err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse SAML response"})
+		return
+	}
+
+	// 验证 SAML 签名
+	if err := verifySAMLSignature(decoded, config.Certificate); err != nil {
+		logger.LogError(c, "[SAML] Signature verification failed: "+err.Error())
+		// 在开发环境中，允许跳过签名验证
+		if common.GetEnvOrDefault("SAML_SKIP_SIGNATURE_CHECK", "false") != "true" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "SAML signature verification failed"})
+			return
+		}
+	}
+
+	// 提取用户信息
+	email := samlResp.Email
+	if email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no email found in SAML response"})
+		return
+	}
+
+	// 获取 SSO 配置 (从 SAML Issuer 获取)
+	config, err := getSAMLConfigByIssuer(samlResp.Issuer)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "SAML issuer not recognized"})
+		return
+	}
+
+	// 检查邮箱域名
+	if !config.IsEmailAllowedForSSO(email) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "email domain not allowed"})
+		return
+	}
+
+	// 创建或更新用户
+	userInfo := &OIDCUserInfo{
+		Email: email,
+		Name:  samlResp.Name,
+	}
+	user, err := createOrUpdateSSOUser(config, userInfo)
+	if err != nil {
+		logger.LogError(c, "[SAML] Failed to create/update user: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create or update user"})
+		return
+	}
+
+	// 生成 JWT token
+	token, expiresAt, err := generateUserToken(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
 
 	c.JSON(http.StatusOK, ttmodel.SSOLoginResponse{
-		Success: true,
-		Message: "SAML login successful",
+		Success:   true,
+		Token:     token,
+		UserId:    user.Id,
+		Email:     email,
+		ExpiresAt: expiresAt,
+		Message:   "SAML login successful",
 	})
+}
+
+// SAMLResponseData SAML 响应数据结构
+type SAMLResponseData struct {
+	XMLName  xml.Name `xml:"Response"`
+	Issuer   string   `xml:"Issuer"`
+	NameID   string   `xml:"Assertion>Subject>NameID"`
+	Email    string   `xml:"Assertion>AttributeStatement>Attribute>AttributeValue,attr=Name=mail"`
+	Name     string   `xml:"Assertion>AttributeStatement>Attribute>AttributeValue,attr=Name=cn"`
+	NotOnOrAfter string `xml:"Assertion>Subject>SubjectConfirmation>SubjectConfirmationData,attr=NotOnOrAfter"`
+}
+
+// parseSAMLResponse 解析 SAML 响应
+func parseSAMLResponse(data []byte) (*SAMLResponseData, error) {
+	var resp SAMLResponseData
+	if err := xml.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal SAML response: %w", err)
+	}
+
+	// 尝试从其他属性获取邮箱
+	if resp.Email == "" {
+		// 某些 IdP 使用 NameID 作为邮箱
+		if strings.Contains(resp.NameID, "@") {
+			resp.Email = resp.NameID
+		}
+	}
+
+	return &resp, nil
+}
+
+// getSAMLConfigByIssuer 根据 SAML Issuer 获取配置
+func getSAMLConfigByIssuer(issuer string) (*ttmodel.SSOConfig, error) {
+	var config ttmodel.SSOConfig
+	err := ttmodel.DB.Where("provider = ? AND entity_id = ? AND enabled = ?",
+		ttmodel.SSOProviderSAML, issuer, true).First(&config).Error
+	if err != nil {
+		return nil, fmt.Errorf("SAML config not found for issuer: %s", issuer)
+	}
+	return &config, nil
 }
 
 // GetPredefinedOIDCProviders 获取预定义的 OIDC 提供商
@@ -296,11 +595,11 @@ func GetPredefinedOIDCProviders(c *gin.Context) {
 	providers := make([]map[string]interface{}, 0)
 	for key, config := range ttmodel.PredefinedOIDCProviders {
 		providers = append(providers, map[string]interface{}{
-			"key":         key,
-			"name":        config.Name,
-			"issuer_url":  config.IssuerUrl,
-			"auth_url":    config.AuthUrl,
-			"token_url":   config.TokenUrl,
+			"key":          key,
+			"name":         config.Name,
+			"issuer_url":   config.IssuerUrl,
+			"auth_url":     config.AuthUrl,
+			"token_url":    config.TokenUrl,
 			"userinfo_url": config.UserInfoUrl,
 		})
 	}
@@ -325,10 +624,10 @@ func buildOAuth2AuthUrl(config *ttmodel.SSOConfig, state string) string {
 	params := fmt.Sprintf(
 		"?client_id=%s&redirect_uri=%s&response_type=code&scope=openid%%20email%%20profile",
 		config.ClientId,
-		config.RedirectUrl,
+		url.QueryEscape(config.RedirectUrl),
 	)
 	if state != "" {
-		params += "&state=" + state
+		params += "&state=" + url.QueryEscape(state)
 	}
 	return config.AuthUrl + params
 }
@@ -341,4 +640,123 @@ func generateState(redirect string) string {
 	}
 	data, _ := json.Marshal(state)
 	return base64.URLEncoding.EncodeToString(data)
+}
+
+func parseState(state string) (provider string, redirect string, err error) {
+	data, err := base64.URLEncoding.DecodeString(state)
+	if err != nil {
+		return "", "", err
+	}
+
+	var stateData map[string]interface{}
+	if err := json.Unmarshal(data, &stateData); err != nil {
+		return "", "", err
+	}
+
+	if r, ok := stateData["redirect"].(string); ok {
+		redirect = r
+	}
+	return "", redirect, nil
+}
+
+// verifySAMLSignature 验证 SAML 签名
+func verifySAMLSignature(data []byte, certPEM string) error {
+	// 如果证书为空，跳过验证（仅用于开发环境）
+	if certPEM == "" {
+		return fmt.Errorf("no certificate provided for signature verification")
+	}
+
+	// 解析证书
+	block, err := pemDecode([]byte(certPEM))
+	if err != nil {
+		return fmt.Errorf("failed to decode PEM: %w", err)
+	}
+
+	cert, err := x509.ParseCertificate(block)
+	if err != nil {
+		return fmt.Errorf("failed to parse certificate: %w", err)
+	}
+
+	// 提取签名值和签名数据
+	signatureValue, signedInfo, err := extractSAMLSignature(data)
+	if err != nil {
+		return fmt.Errorf("failed to extract signature: %w", err)
+	}
+
+	// 如果没有找到签名，返回错误
+	if signatureValue == nil {
+		return fmt.Errorf("no signature found in SAML response")
+	}
+
+	// 计算签名数据的哈希
+	hasher := sha256.New()
+	hasher.Write(signedInfo)
+	hashed := hasher.Sum(nil)
+
+	// 验证签名
+	pubKey, ok := cert.PublicKey.(*rsa.PublicKey)
+	if !ok {
+		return fmt.Errorf("certificate does not contain RSA public key")
+	}
+
+	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, hashed, signatureValue)
+	if err != nil {
+		return fmt.Errorf("signature verification failed: %w", err)
+	}
+
+	return nil
+}
+
+// extractSAMLSignature 从 SAML XML 中提取签名值和签名数据
+func extractSAMLSignature(data []byte) ([]byte, []byte, error) {
+	// 使用正则表达式提取签名值
+	sigValuePattern := regexp.MustCompile(`<ds:SignatureValue[^>]*>([^<]+)</ds:SignatureValue>`)
+	sigInfoPattern := regexp.MustCompile(`<ds:SignedInfo[^>]*>([\s\S]*?)</ds:SignedInfo>`)
+
+	// 提取签名值
+	sigValueMatch := sigValuePattern.FindSubmatch(data)
+	if sigValueMatch == nil {
+		return nil, nil, fmt.Errorf("signature value not found")
+	}
+
+	sigValue, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sigValueMatch[1])))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to decode signature value: %w", err)
+	}
+
+	// 提取签名信息
+	sigInfoMatch := sigInfoPattern.FindSubmatch(data)
+	if sigInfoMatch == nil {
+		return nil, nil, fmt.Errorf("signed info not found")
+	}
+
+	// 规范化签名信息（简化实现）
+	signedInfo := canonicalizeXML(sigInfoMatch[1])
+
+	return sigValue, signedInfo, nil
+}
+
+// canonicalizeXML XML 规范化（简化实现）
+func canonicalizeXML(data []byte) []byte {
+	// 移除多余的空白字符
+	result := strings.ReplaceAll(string(data), "\n", "")
+	result = strings.ReplaceAll(result, "\r", "")
+	result = strings.ReplaceAll(result, "\t", " ")
+	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
+	return []byte(result)
+}
+
+// PEM 解码辅助函数 (简化实现)
+func pemDecode(data []byte) ([]byte, error) {
+	// 简化的 PEM 解码
+	str := string(data)
+	start := strings.Index(str, "-----BEGIN CERTIFICATE-----")
+	end := strings.Index(str, "-----END CERTIFICATE-----")
+
+	if start == -1 || end == -1 {
+		return nil, fmt.Errorf("invalid PEM format")
+	}
+
+	b64Data := str[start+27 : end]
+	return base64.StdEncoding.DecodeString(b64Data)
 }

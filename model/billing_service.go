@@ -921,6 +921,37 @@ func ListAllPricing() ([]ttmodel.ModelPricing, error) {
 	return pricing, err
 }
 
+// GetModelPricing 获取单个模型的定价
+func GetModelPricing(modelName string) (*ttmodel.ModelPricing, error) {
+	var pricing ttmodel.ModelPricing
+	err := DB.Where("model = ? AND is_active = ?", modelName, true).First(&pricing).Error
+	if err != nil {
+		// 尝试从默认定价中查找
+		for _, p := range ttmodel.DefaultModelPricing {
+			if p.Model == modelName {
+				return &p, nil
+			}
+		}
+		return nil, err
+	}
+	return &pricing, nil
+}
+
+// CalculateCost 计算API调用成本（美元）
+func CalculateCost(modelName string, inputTokens, outputTokens int64) (string, error) {
+	pricing, err := GetModelPricing(modelName)
+	if err != nil {
+		return "0.00", nil
+	}
+
+	// 计算成本: (输入token数 / 1,000,000) * 输入价格 + (输出token数 / 1,000,000) * 输出价格
+	inputCost := pricing.InputPrice.Mul(decimal.NewFromFloat(float64(inputTokens)).Div(decimal.NewFromInt(1000000)))
+	outputCost := pricing.OutputPrice.Mul(decimal.NewFromFloat(float64(outputTokens)).Div(decimal.NewFromInt(1000000)))
+	totalCost := inputCost.Add(outputCost)
+
+	return totalCost.StringFixed(6), nil
+}
+
 func CreateModelPricing(modelName, inputPrice, outputPrice, perImagePrice, perSecondPrice, perCharPrice string) (*ttmodel.ModelPricing, error) {
 	pricing := ttmodel.ModelPricing{
 		Model:    modelName,

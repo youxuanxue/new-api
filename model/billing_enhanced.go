@@ -430,3 +430,40 @@ var DefaultReferralConfig = ReferralConfig{
 	DeviceCooldownHours: 24,
 	RequireFirstCharge:  true,
 }
+
+// PlaygroundHistory Playground历史记录
+type PlaygroundHistory struct {
+	Id        uint      `json:"id" gorm:"primaryKey"`
+	UserId    uint      `json:"user_id" gorm:"index;not null"`
+	Models    string    `json:"models" gorm:"type:text"`      // JSON数组: ["model1", "model2"]
+	Prompt    string    `json:"prompt" gorm:"type:text"`      // 用户输入的提示词
+	Response  string    `json:"response" gorm:"type:text"`    // JSON数组: 各模型的响应
+	CostUSD   string    `json:"cost_usd" gorm:"size:32"`      // 总成本
+	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
+}
+
+// TableName 指定表名
+func (PlaygroundHistory) TableName() string {
+	return "playground_histories"
+}
+
+// GetPlaygroundHistory 获取用户Playground历史记录
+func GetPlaygroundHistory(userId uint, limit int) ([]PlaygroundHistory, error) {
+	var histories []PlaygroundHistory
+	query := DB.Where("user_id = ?", userId).Order("created_at DESC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	err := query.Find(&histories).Error
+	return histories, err
+}
+
+// CreatePlaygroundHistory 创建Playground历史记录
+func CreatePlaygroundHistory(history *PlaygroundHistory) error {
+	return DB.Create(history).Error
+}
+
+// DeletePlaygroundHistory 删除Playground历史记录
+func DeletePlaygroundHistory(id uint, userId uint) error {
+	return DB.Where("id = ? AND user_id = ?", id, userId).Delete(&PlaygroundHistory{}).Error
+}
