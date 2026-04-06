@@ -50,6 +50,11 @@ import PersonalSetting from './components/settings/PersonalSetting';
 import Setup from './pages/Setup';
 import SetupCheck from './components/layout/SetupCheck';
 
+// TT Components
+import { UserDashboard } from './components/tt/dashboard/UserDashboard';
+import { TeamManagement } from './components/tt/team/TeamManagement';
+import { AdminConsole } from './components/tt/admin/AdminConsole';
+
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const About = lazy(() => import('./pages/About'));
@@ -377,6 +382,59 @@ function App() {
             </PrivateRoute>
           }
         />
+
+        {/* TT Dashboard Routes */}
+        <Route
+          path='/tt/dashboard'
+          element={
+            <PrivateRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <UserDashboard />
+              </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/tt/teams'
+          element={
+            <PrivateRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <TeamManagement />
+              </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/tt/teams/:id'
+          element={
+            <PrivateRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <TeamManagement />
+              </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/tt/admin'
+          element={
+            <AdminRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <AdminConsole />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/tt/admin/:tab'
+          element={
+            <AdminRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <AdminConsole />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+
         <Route path='*' element={<NotFound />} />
       </Routes>
     </SetupCheck>

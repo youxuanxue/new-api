@@ -395,3 +395,147 @@ export function getChannelModels(type) {
   }
   return [];
 }
+
+// ========== TT API Helper Functions ==========
+
+/**
+ * TT User API endpoints
+ */
+export const TT_API = {
+  // Balance & Usage
+  getBalance: () => API.get('/tt/balance'),
+  getUsage: (period = 'today') => API.get(`/tt/usage?period=${period}`),
+  getUsageDetails: (params) => API.get('/tt/usage/details', { params }),
+
+  // Model Verification
+  verifyModel: (model) => API.post('/tt/verify', { model }),
+  getServiceStatus: () => API.get('/tt/status'),
+
+  // Referral
+  getReferralInfo: () => API.get('/tt/referral'),
+  applyReferralCode: (code) => API.post('/tt/referral/apply', { invite_code: code }),
+  getReferralRecords: () => API.get('/tt/referral/records'),
+
+  // Subscription
+  getSubscription: () => API.get('/tt/subscription'),
+  subscribePlan: (planId, billingCycle = 'monthly') => API.post('/tt/subscription/subscribe', { plan_id: planId, billing_cycle: billingCycle }),
+  cancelSubscription: (reason = '') => API.post('/tt/subscription/cancel', { reason }),
+  listPlans: () => API.get('/tt/subscription/plans'),
+
+  // Teams
+  listTeams: () => API.get('/tt/teams'),
+  createTeam: (name, description = '') => API.post('/tt/teams', { name, description }),
+  getTeam: (teamId) => API.get(`/tt/teams/${teamId}`),
+  addTeamMember: (teamId, userId, role = 'member') => API.post(`/tt/teams/${teamId}/members`, { user_id: userId, role }),
+  removeTeamMember: (teamId, userId) => API.delete(`/tt/teams/${teamId}/members/${userId}`),
+  updateMemberRole: (teamId, userId, role) => API.put(`/tt/teams/${teamId}/members/${userId}/role`, { role }),
+  listTeamAPIKeys: (teamId) => API.get(`/tt/teams/${teamId}/api-keys`),
+  createTeamAPIKey: (teamId, name, description = '') => API.post(`/tt/teams/${teamId}/api-keys`, { name, description }),
+  revokeTeamAPIKey: (teamId, keyId) => API.delete(`/tt/teams/${teamId}/api-keys/${keyId}`),
+
+  // Budget
+  getBudgetConfig: () => API.get('/tt/budget'),
+  setBudgetConfig: (config) => API.put('/tt/budget', config),
+  getBudgetStatus: () => API.get('/tt/budget/status'),
+
+  // Logs
+  getCallLogs: (params) => API.get('/tt/logs', { params }),
+  getCallLogDetail: (logId) => API.get(`/tt/logs/${logId}`),
+
+  // Smart Router
+  getSmartRouterConfig: () => API.get('/tt/router/config'),
+  getRouteRecommendation: (data) => API.post('/tt/router/recommend', data),
+
+  // Reports (V2.0)
+  getCostReport: (params) => API.get('/tt/reports/cost', { params }),
+  exportCostReport: (format = 'json') => API.get(`/tt/reports/cost/export?format=${format}`),
+  getModelCostBreakdown: (params) => API.get('/tt/reports/breakdown/models', { params }),
+
+  // Playground (V2.0)
+  getPlaygroundModels: () => API.get('/tt/playground/models'),
+  runPlayground: (data) => API.post('/tt/playground/run', data),
+  runPlaygroundSingle: (data) => API.post('/tt/playground/run/single', data),
+  getPlaygroundHistory: () => API.get('/tt/playground/history'),
+
+  // Cache (V2.0)
+  getCacheStats: () => API.get('/tt/cache/stats'),
+  clearCache: () => API.post('/tt/cache/clear'),
+
+  // SLA (V2.0)
+  getSLAStatus: () => API.get('/tt/sla/status'),
+  getSLAReports: (params) => API.get('/tt/sla/reports', { params }),
+  getSLAReportDetail: (reportId) => API.get(`/tt/sla/reports/${reportId}`),
+  getSLABreaches: () => API.get('/tt/sla/breaches'),
+  getSLAIncidents: (params) => API.get('/tt/sla/incidents', { params }),
+  getSLAConfig: () => API.get('/tt/sla/config'),
+  updateSLAConfig: (config) => API.put('/tt/sla/config', config),
+  getSLATiers: () => API.get('/tt/sla/tiers'),
+
+  // SSO (V2.0)
+  getSSOProviders: () => API.get('/tt/sso/providers'),
+  initiateSSOLogin: (provider, redirect) => API.post('/tt/sso/login', { provider, redirect }),
+  getPredefinedOIDCProviders: () => API.get('/tt/sso/predefined'),
+
+  // Public
+  getPublicStatus: () => API.get('/tt/public/status'),
+  getPublicStats: () => API.get('/tt/public/stats'),
+};
+
+/**
+ * TT Admin API endpoints
+ */
+export const TT_ADMIN_API = {
+  // Dashboard
+  getDashboard: () => API.get('/admin/dashboard'),
+
+  // Users
+  listUsers: (params) => API.get('/admin/users', { params }),
+  getUser: (userId) => API.get(`/admin/users/${userId}`),
+  updateUser: (userId, data) => API.put(`/admin/users/${userId}`, data),
+  adjustUserBalance: (userId, amount) => API.post(`/admin/users/${userId}/adjust-balance`, { amount }),
+  setUserStatus: (userId, status) => API.post(`/admin/users/${userId}/status`, { status }),
+
+  // Channels
+  listChannels: (params) => API.get('/admin/channels', { params }),
+  createChannel: (data) => API.post('/admin/channels', data),
+  updateChannel: (channelId, data) => API.put(`/admin/channels/${channelId}`, data),
+  deleteChannel: (channelId) => API.delete(`/admin/channels/${channelId}`),
+  testChannel: (channelId) => API.post(`/admin/channels/${channelId}/test`),
+
+  // Pool Accounts
+  getPoolStatus: () => API.get('/admin/pool'),
+  listPoolAccounts: (status) => API.get('/admin/pool/accounts', { params: { status } }),
+  addPoolAccount: (data) => API.post('/admin/pool/accounts', data),
+  removePoolAccount: (accountId) => API.delete(`/admin/pool/accounts/${accountId}`),
+  refreshPoolAccount: (accountId) => API.post(`/admin/pool/accounts/${accountId}/refresh`),
+
+  // Pricing
+  listPricing: () => API.get('/admin/pricing'),
+  createPricing: (data) => API.post('/admin/pricing', data),
+  updatePricing: (pricingId, data) => API.put(`/admin/pricing/${pricingId}`, data),
+
+  // Plans
+  listPlans: () => API.get('/admin/plans'),
+  createPlan: (data) => API.post('/admin/plans', data),
+  updatePlan: (planId, data) => API.put(`/admin/plans/${planId}`, data),
+
+  // Finance
+  getFinanceOverview: () => API.get('/admin/finance/overview'),
+  getRevenueReport: (params) => API.get('/admin/finance/revenue', { params }),
+  getCostReport: (params) => API.get('/admin/finance/costs', { params }),
+  listPayments: (params) => API.get('/admin/finance/payments', { params }),
+
+  // Audit
+  listAuditLogs: (params) => API.get('/admin/audit', { params }),
+
+  // Settings
+  getSettings: () => API.get('/admin/settings'),
+  updateSettings: (data) => API.put('/admin/settings', data),
+
+  // Webhooks
+  listWebhooks: () => API.get('/admin/webhooks'),
+  createWebhook: (data) => API.post('/admin/webhooks', data),
+  updateWebhook: (webhookId, data) => API.put(`/admin/webhooks/${webhookId}`, data),
+  deleteWebhook: (webhookId) => API.delete(`/admin/webhooks/${webhookId}`),
+  testWebhook: (webhookId) => API.post(`/admin/webhooks/${webhookId}/test`),
+};

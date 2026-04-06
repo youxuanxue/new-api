@@ -872,6 +872,10 @@ func RemovePoolAccount(id uint) error {
 	return DB.Delete(&PoolAccount{}, id).Error
 }
 
+func RemovePoolAccountByEmail(email string) error {
+	return DB.Where("email = ?", email).Delete(&PoolAccount{}).Error
+}
+
 func RefreshPoolAccountToken(id uint) error {
 	var account PoolAccount
 	err := DB.First(&account, id).Error
