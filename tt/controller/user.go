@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/middleware"
-	"github.com/QuantumNous/new-api/model"
 	ttmodel "github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	ttservice "github.com/QuantumNous/new-api/tt/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
@@ -41,7 +40,7 @@ func GetBalance(c *gin.Context) {
 	}
 
 	// 获取用户信息
-	user, err := model.GetUserById(userId, false)
+	user, err := ttmodel.GetUserById(userId, false)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
@@ -275,25 +274,14 @@ func GetServiceStatus(c *gin.Context) {
 
 // GetPublicStatus 获取公开状态
 func GetPublicStatus(c *gin.Context) {
-	status := GetServiceStatus(c)
-	// 公开版本不需要认证，直接返回
-}
-
-// PublicStats 公开统计数据
-type PublicStats struct {
-	TotalUsers       int64  `json:"total_users"`
-	TotalRequests    int64  `json:"total_requests"`
-	TotalTokens      int64  `json:"total_tokens"`
-	Uptime30Days     string `json:"uptime_30_days"`
-	AvgLatency       int64  `json:"avg_latency_ms"`
+	GetServiceStatus(c)
 }
 
 // GetPublicStats 获取公开统计数据
 func GetPublicStats(c *gin.Context) {
 	stats, err := ttmodel.GetPublicStats()
 	if err != nil {
-		// 返回默认值
-		stats = &PublicStats{
+		stats = &ttmodel.PublicStats{
 			TotalUsers:    0,
 			TotalRequests: 0,
 			TotalTokens:   0,
@@ -626,7 +614,7 @@ func GetTeam(c *gin.Context) {
 	}
 
 	// 验证用户是团队成员
-	isMember, role := ttmodel.IsTeamMember(uint(id), uint(userId))
+	isMember, _ := ttmodel.IsTeamMember(uint(id), uint(userId))
 	if !isMember {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not a team member"})
 		return
@@ -1110,7 +1098,7 @@ type SmartRouterConfigResponse struct {
 }
 
 // smartRouter 全局智能路由实例
-var smartRouter = service.NewSmartRouter(nil)
+var smartRouter = ttservice.NewSmartRouter(nil)
 
 // GetSmartRouterConfig 获取智能路由配置
 func GetSmartRouterConfig(c *gin.Context) {
@@ -1127,7 +1115,7 @@ func GetSmartRouterConfig(c *gin.Context) {
 // SmartRouteRequest 智能路由请求
 type SmartRouteRequest struct {
 	Model           string                `json:"model"`
-	Messages        []service.RouterMessage `json:"messages"`
+	Messages        []ttservice.RouterMessage `json:"messages"`
 	MaxTokens       int                   `json:"max_tokens,omitempty"`
 	Temperature     float64               `json:"temperature,omitempty"`
 	EstimatedTokens int                   `json:"estimated_tokens,omitempty"`
@@ -1159,10 +1147,10 @@ func SmartRoute(c *gin.Context) {
 		for _, msg := range req.Messages {
 			totalContent += msg.Content
 		}
-		req.EstimatedTokens = service.EstimateTokens(totalContent)
+		req.EstimatedTokens = ttservice.EstimateTokens(totalContent)
 	}
 
-	routerReq := &service.RouterRequest{
+	routerReq := &ttservice.RouterRequest{
 		Model:           req.Model,
 		Messages:        req.Messages,
 		MaxTokens:       req.MaxTokens,
@@ -1266,7 +1254,7 @@ func GetCallLogDetail(c *gin.Context) {
 
 // recordRequest 记录请求元数据
 func recordRequest(c *gin.Context, model string, inputTokens, outputTokens int64, costUSD decimal.Decimal) {
-	requestId, _ := c.Get(middleware.RequestIdKey)
+	requestId, _ := c.Get(common.RequestIdKey)
 	if requestId == nil {
 		requestId = ""
 	}

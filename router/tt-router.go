@@ -204,7 +204,7 @@ func SetTTAdminRouter(router *gin.Engine) {
 		// 财务中心
 		adminRouter.GET("/finance/overview", controller.GetFinanceOverview)
 		adminRouter.GET("/finance/revenue", controller.GetRevenueReport)
-		adminRouter.GET("/finance/costs", controller.GetCostReport)
+		adminRouter.GET("/finance/costs", controller.GetAdminCostReport)
 		adminRouter.GET("/finance/payments", controller.ListPayments)
 
 		// 审计日志

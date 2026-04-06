@@ -4,19 +4,18 @@ Copyright (C) 2026 TokenKey
 */
 
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Typography, Button, Table, Tag, Modal, Form, Input, Select, Avatar, Dropdown, Menu, message, Spin, Empty, Popconfirm, Descriptions } from '@douyinfe/semi-ui';
+import { Card, Row, Col, Typography, Button, Table, Tag, Modal, Form, Input, Select, Avatar, Dropdown, Toast, Spin, Empty, Popconfirm, Descriptions } from '@douyinfe/semi-ui';
 import {
-  IconUsers,
+  IconUserGroup,
   IconPlus,
   IconMore,
   IconKey,
   IconSetting,
   IconDelete,
   IconCreditCard,
-  IconInvite,
-  IconMember,
+  IconUserAdd,
 } from '@douyinfe/semi-icons';
-import { API } from '../../helpers/api';
+import { API } from '../../../helpers/api';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -40,7 +39,7 @@ const TeamListCard = ({ teams, onCreate, onSelect, loading }) => {
 
   const handleCreate = async () => {
     if (!form.name) {
-      message.error('请输入团队名称');
+      Toast.error('请输入团队名称');
       return;
     }
     await onCreate(form);
@@ -118,7 +117,7 @@ const TeamListCard = ({ teams, onCreate, onSelect, loading }) => {
     <Card className="tt-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <IconUsers size={20} className="text-indigo-500" />
+          <IconUserGroup size={20} className="text-indigo-500" />
           <Text strong>我的团队</Text>
         </div>
         <Button
@@ -216,22 +215,22 @@ const TeamDetailCard = ({ team, members, apiKeys, onAddMember, onRemoveMember, o
         return (
           <Dropdown
             content={
-              <Menu>
+              <Dropdown.Menu>
                 {record.role !== 'admin' && (
-                  <Menu.Item onClick={() => onUpdateRole(record.user_id, 'admin')}>
-                    <IconMember /> 设为管理员
-                  </Menu.Item>
+                  <Dropdown.Item onClick={() => onUpdateRole(record.user_id, 'admin')}>
+                    <IconUserAdd /> 设为管理员
+                  </Dropdown.Item>
                 )}
                 {record.role !== 'member' && (
-                  <Menu.Item onClick={() => onUpdateRole(record.user_id, 'member')}>
-                    <IconMember /> 设为成员
-                  </Menu.Item>
+                  <Dropdown.Item onClick={() => onUpdateRole(record.user_id, 'member')}>
+                    <IconUserAdd /> 设为成员
+                  </Dropdown.Item>
                 )}
-                <Menu.Item divider />
-                <Menu.Item type="danger" onClick={() => onRemoveMember(record.user_id)}>
+                <Dropdown.Divider />
+                <Dropdown.Item type="danger" onClick={() => onRemoveMember(record.user_id)}>
                   <IconDelete /> 移除
-                </Menu.Item>
-              </Menu>
+                </Dropdown.Item>
+              </Dropdown.Menu>
             }
           >
             <Button type="tertiary" icon={<IconMore />} size="small" />
@@ -321,13 +320,13 @@ const TeamDetailCard = ({ team, members, apiKeys, onAddMember, onRemoveMember, o
       <Card className="tt-card">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <IconUsers size={18} className="text-blue-500" />
+            <IconUserGroup size={18} className="text-blue-500" />
             <Text strong>成员管理</Text>
           </div>
           <Button
             type="primary"
             size="small"
-            icon={<IconInvite />}
+            icon={<IconUserAdd />}
             onClick={() => setAddMemberModalVisible(true)}
           >
             添加成员
@@ -447,7 +446,7 @@ const TeamManagement = () => {
       const res = await API.get('/tt/teams');
       setTeams(res.data.data || []);
     } catch (error) {
-      message.error('获取团队列表失败');
+      Toast.error('获取团队列表失败');
     } finally {
       setLoading(false);
     }
@@ -467,7 +466,7 @@ const TeamManagement = () => {
       setApiKeys(keysRes.data.data || []);
       setSelectedTeam(teamId);
     } catch (error) {
-      message.error('获取团队详情失败');
+      Toast.error('获取团队详情失败');
     } finally {
       setLoading(false);
     }
@@ -480,60 +479,60 @@ const TeamManagement = () => {
   const handleCreateTeam = async (data) => {
     try {
       await API.post('/tt/teams', data);
-      message.success('团队创建成功');
+      Toast.success('团队创建成功');
       fetchTeams();
     } catch (error) {
-      message.error('创建失败');
+      Toast.error('创建失败');
     }
   };
 
   const handleAddMember = async (userId, role) => {
     try {
       await API.post(`/tt/teams/${selectedTeam}/members`, { user_id: userId, role });
-      message.success('添加成功');
+      Toast.success('添加成功');
       fetchTeamDetail(selectedTeam);
     } catch (error) {
-      message.error('添加失败');
+      Toast.error('添加失败');
     }
   };
 
   const handleRemoveMember = async (userId) => {
     try {
       await API.delete(`/tt/teams/${selectedTeam}/members/${userId}`);
-      message.success('已移除');
+      Toast.success('已移除');
       fetchTeamDetail(selectedTeam);
     } catch (error) {
-      message.error('操作失败');
+      Toast.error('操作失败');
     }
   };
 
   const handleUpdateRole = async (userId, role) => {
     try {
       await API.put(`/tt/teams/${selectedTeam}/members/${userId}/role`, { role });
-      message.success('已更新');
+      Toast.success('已更新');
       fetchTeamDetail(selectedTeam);
     } catch (error) {
-      message.error('操作失败');
+      Toast.error('操作失败');
     }
   };
 
   const handleCreateKey = async (name, description) => {
     try {
       await API.post(`/tt/teams/${selectedTeam}/api-keys`, { name, description });
-      message.success('创建成功');
+      Toast.success('创建成功');
       fetchTeamDetail(selectedTeam);
     } catch (error) {
-      message.error('创建失败');
+      Toast.error('创建失败');
     }
   };
 
   const handleRevokeKey = async (keyId) => {
     try {
       await API.delete(`/tt/teams/${selectedTeam}/api-keys/${keyId}`);
-      message.success('已吊销');
+      Toast.success('已吊销');
       fetchTeamDetail(selectedTeam);
     } catch (error) {
-      message.error('操作失败');
+      Toast.error('操作失败');
     }
   };
 
@@ -573,4 +572,5 @@ const TeamManagement = () => {
   );
 };
 
+export { TeamManagement };
 export default TeamManagement;

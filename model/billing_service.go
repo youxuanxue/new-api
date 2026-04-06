@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	ttmodel "github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
@@ -17,13 +16,13 @@ import (
 // ========== 用户扩展 ==========
 
 // GetUserExtension 获取用户扩展信息
-func GetUserExtension(userId int) (*ttmodel.UserExtension, error) {
-	var ext ttmodel.UserExtension
+func GetUserExtension(userId int) (*UserExtension, error) {
+	var ext UserExtension
 	err := DB.Where("user_id = ?", userId).First(&ext).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 创建默认扩展
-			ext = ttmodel.UserExtension{
+			ext = UserExtension{
 				UserId:       uint(userId),
 				TrialBalance: decimal.Zero,
 				TrialUsed:    decimal.Zero,
@@ -49,7 +48,7 @@ func GrantTrialBalance(userId int) error {
 	}
 
 	// 发放赠送余额
-	trialAmount := ttmodel.DefaultTrialConfig.TrialAmount
+	trialAmount := DefaultTrialConfig.TrialAmount
 	ext.TrialBalance = trialAmount
 	now := time.Now()
 	ext.TrialGrantedAt = &now
@@ -85,7 +84,7 @@ func GetUserUsage(userId int, startTime time.Time) (*UsageStats, error) {
 	}
 
 	// 从消费记录表获取数据
-	var records []ttmodel.ConsumptionRecord
+	var records []ConsumptionRecord
 	err := DB.Where("user_id = ? AND created_at >= ?", userId, startTime).Find(&records).Error
 	if err != nil {
 		return nil, err
@@ -138,10 +137,10 @@ type UsageDetail struct {
 
 // GetUserUsageDetails 获取用户用量详情
 func GetUserUsageDetails(userId int, page, pageSize, model string) ([]UsageDetail, int64, error) {
-	var records []ttmodel.ConsumptionRecord
+	var records []ConsumptionRecord
 	var total int64
 
-	query := DB.Model(&ttmodel.ConsumptionRecord{}).Where("user_id = ?", userId)
+	query := DB.Model(&ConsumptionRecord{}).Where("user_id = ?", userId)
 	if model != "" {
 		query = query.Where("model = ?", model)
 	}
@@ -197,15 +196,15 @@ func GetReferralInfo(userId int) (*ReferralInfo, error) {
 
 	// 统计邀请数量
 	var totalInvites, successfulInvites int64
-	DB.Model(&ttmodel.Referral{}).Where("inviter_id = ?", userId).Count(&totalInvites)
-	DB.Model(&ttmodel.Referral{}).Where("inviter_id = ? AND status = ?", userId, "granted").Count(&successfulInvites)
+	DB.Model(&Referral{}).Where("inviter_id = ?", userId).Count(&totalInvites)
+	DB.Model(&Referral{}).Where("inviter_id = ? AND status = ?", userId, "granted").Count(&successfulInvites)
 
 	info.TotalInvites = int(totalInvites)
 	info.SuccessfulInvites = int(successfulInvites)
 
 	// 计算奖励总额
 	var totalReward decimal.Decimal
-	DB.Model(&ttmodel.Referral{}).Where("inviter_id = ? AND status = ?", userId, "granted").
+	DB.Model(&Referral{}).Where("inviter_id = ? AND status = ?", userId, "granted").
 		Select("COALESCE(SUM(inviter_bonus), 0)").Scan(&totalReward)
 	info.TotalReward = totalReward.StringFixed(2)
 
@@ -213,7 +212,7 @@ func GetReferralInfo(userId int) (*ReferralInfo, error) {
 }
 
 // ApplyReferralCode 使用邀请码
-func ApplyReferralCode(userId int, inviteCode string, ip string) (*ttmodel.Referral, error) {
+func ApplyReferralCode(userId int, inviteCode string, ip string) (*Referral, error) {
 	// 查找邀请人
 	var inviter User
 	err := DB.Where("aff_code = ?", inviteCode).First(&inviter).Error
@@ -227,22 +226,22 @@ func ApplyReferralCode(userId int, inviteCode string, ip string) (*ttmodel.Refer
 
 	// 检查是否已经使用过邀请码
 	var count int64
-	DB.Model(&ttmodel.Referral{}).Where("invitee_id = ?", userId).Count(&count)
+	DB.Model(&Referral{}).Where("invitee_id = ?", userId).Count(&count)
 	if count > 0 {
 		return nil, errors.New("您已经使用过邀请码")
 	}
 
 	// 检查IP冷却期
-	config := ttmodel.DefaultReferralConfig
+	config := DefaultReferralConfig
 	var ipCount int64
 	cutoff := time.Now().Add(-time.Duration(config.IPCooldownHours) * time.Hour)
-	DB.Model(&ttmodel.Referral{}).Where("ip_address = ? AND created_at > ?", ip, cutoff).Count(&ipCount)
+	DB.Model(&Referral{}).Where("ip_address = ? AND created_at > ?", ip, cutoff).Count(&ipCount)
 	if ipCount > 0 {
 		return nil, errors.New("同一IP在24小时内只能使用一次邀请码")
 	}
 
 	// 创建邀请记录
-	referral := ttmodel.Referral{
+	referral := Referral{
 		InviterId:   uint(inviter.Id),
 		InviteeId:   uint(userId),
 		InviteCode:  inviteCode,
@@ -289,8 +288,8 @@ func GrantReferralBonus(inviterId, inviteeId int, amount decimal.Decimal) {
 }
 
 // GetReferralRecords 获取邀请记录
-func GetReferralRecords(userId int) ([]ttmodel.Referral, error) {
-	var records []ttmodel.Referral
+func GetReferralRecords(userId int) ([]Referral, error) {
+	var records []Referral
 	err := DB.Where("inviter_id = ?", userId).Order("created_at DESC").Find(&records).Error
 	return records, err
 }
@@ -309,9 +308,8 @@ type SubscriptionInfo struct {
 
 // GetUserSubscription 获取用户订阅
 func GetUserSubscription(userId int) (*SubscriptionInfo, error) {
-	var sub ttmodel.Subscription
-	err := DB.Where("user_id = ? AND status = ?", userId, "active").
-		Preload("Plan").First(&sub).Error
+	var sub Subscription
+	err := DB.Where("user_id = ? AND status = ?", userId, "active").First(&sub).Error
 	if err != nil {
 		return nil, err
 	}
@@ -324,17 +322,20 @@ func GetUserSubscription(userId int) (*SubscriptionInfo, error) {
 		RemainingUSD:    sub.RemainingUSD.StringFixed(2),
 	}
 
-	if sub.Plan.Id > 0 {
-		info.PlanName = sub.Plan.Name
+	if sub.PlanId > 0 {
+		var plan Plan
+		if err := DB.First(&plan, sub.PlanId).Error; err == nil {
+			info.PlanName = plan.Name
+		}
 	}
 
 	return info, nil
 }
 
 // CreateSubscription 创建订阅
-func CreateSubscription(userId int, planId uint, billingCycle string) (*ttmodel.Subscription, error) {
+func CreateSubscription(userId int, planId uint, billingCycle string) (*Subscription, error) {
 	// 获取套餐信息
-	var plan ttmodel.Plan
+	var plan Plan
 	err := DB.First(&plan, planId).Error
 	if err != nil {
 		return nil, errors.New("套餐不存在")
@@ -342,7 +343,7 @@ func CreateSubscription(userId int, planId uint, billingCycle string) (*ttmodel.
 
 	// 检查是否已有活跃订阅
 	var count int64
-	DB.Model(&ttmodel.Subscription{}).Where("user_id = ? AND status = ?", userId, "active").Count(&count)
+	DB.Model(&Subscription{}).Where("user_id = ? AND status = ?", userId, "active").Count(&count)
 	if count > 0 {
 		return nil, errors.New("已有活跃订阅，请先取消")
 	}
@@ -355,7 +356,7 @@ func CreateSubscription(userId int, planId uint, billingCycle string) (*ttmodel.
 		expiresAt = time.Now().AddDate(0, 1, 0)
 	}
 
-	sub := ttmodel.Subscription{
+	sub := Subscription{
 		UserId:       uint(userId),
 		PlanId:       planId,
 		Status:       "active",
@@ -380,7 +381,7 @@ func CreateSubscription(userId int, planId uint, billingCycle string) (*ttmodel.
 
 // CancelUserSubscription 取消订阅
 func CancelUserSubscription(userId int, reason string) error {
-	return DB.Model(&ttmodel.Subscription{}).
+	return DB.Model(&Subscription{}).
 		Where("user_id = ? AND status = ?", userId, "active").
 		Updates(map[string]interface{}{
 			"status":        "cancelled",
@@ -390,8 +391,8 @@ func CancelUserSubscription(userId int, reason string) error {
 }
 
 // GetActivePlans 获取活跃套餐
-func GetActivePlans() ([]ttmodel.Plan, error) {
-	var plans []ttmodel.Plan
+func GetActivePlans() ([]Plan, error) {
+	var plans []Plan
 	err := DB.Where("is_active = ?", true).Order("sort_order").Find(&plans).Error
 	return plans, err
 }
@@ -418,7 +419,7 @@ func GetPublicStats() (*PublicStats, error) {
 	DB.Model(&User{}).Count(&stats.TotalUsers)
 
 	// 统计请求数和Token数
-	DB.Model(&ttmodel.ConsumptionRecord{}).
+	DB.Model(&ConsumptionRecord{}).
 		Select("COUNT(*) as total_requests, COALESCE(SUM(input_tokens + output_tokens), 0) as total_tokens").
 		Scan(stats)
 
@@ -465,11 +466,11 @@ func GetDashboardData() (*DashboardData, error) {
 	today := time.Now().Truncate(24 * time.Hour)
 
 	// 今日请求数
-	DB.Model(&ttmodel.ConsumptionRecord{}).Where("created_at >= ?", today).Count(&data.TodayRequests)
+	DB.Model(&ConsumptionRecord{}).Where("created_at >= ?", today).Count(&data.TodayRequests)
 
 	// 今日收入
 	var todayRevenue decimal.Decimal
-	DB.Model(&ttmodel.ConsumptionRecord{}).Where("created_at >= ?", today).
+	DB.Model(&ConsumptionRecord{}).Where("created_at >= ?", today).
 		Select("COALESCE(SUM(actual_cost_usd), 0)").Scan(&todayRevenue)
 	data.TodayRevenue = todayRevenue.StringFixed(2)
 
@@ -484,11 +485,11 @@ func GetDashboardData() (*DashboardData, error) {
 
 		dayStart := time.Now().AddDate(0, 0, -i).Truncate(24 * time.Hour)
 		var dayCount int64
-		DB.Model(&ttmodel.ConsumptionRecord{}).Where("created_at >= ? AND created_at < ?", dayStart, dayStart.Add(24*time.Hour)).Count(&dayCount)
+		DB.Model(&ConsumptionRecord{}).Where("created_at >= ? AND created_at < ?", dayStart, dayStart.Add(24*time.Hour)).Count(&dayCount)
 		data.TrendData.Requests = append(data.TrendData.Requests, dayCount)
 
 		var dayRevenue decimal.Decimal
-		DB.Model(&ttmodel.ConsumptionRecord{}).Where("created_at >= ? AND created_at < ?", dayStart, dayStart.Add(24*time.Hour)).
+		DB.Model(&ConsumptionRecord{}).Where("created_at >= ? AND created_at < ?", dayStart, dayStart.Add(24*time.Hour)).
 			Select("COALESCE(SUM(actual_cost_usd), 0)").Scan(&dayRevenue)
 		data.TrendData.Revenue = append(data.TrendData.Revenue, dayRevenue.StringFixed(2))
 	}
@@ -540,7 +541,7 @@ func ListUsersForAdmin(page, pageSize, search, status string) ([]UserForAdmin, i
 			Balance:   decimal.NewFromInt(int64(u.Quota)).Div(decimal.NewFromInt(500000)).StringFixed(2),
 			TotalUsed: decimal.NewFromInt(int64(u.UsedQuota)).Div(decimal.NewFromInt(500000)).StringFixed(2),
 			Status:    fmt.Sprintf("%d", u.Status),
-			CreatedAt: u.CreatedAt.Format(time.RFC3339),
+			CreatedAt: "",
 		}
 	}
 
@@ -562,7 +563,7 @@ func GetUserDetailForAdmin(userId uint) (*UserForAdmin, error) {
 		Balance:   decimal.NewFromInt(int64(user.Quota)).Div(decimal.NewFromInt(500000)).StringFixed(2),
 		TotalUsed: decimal.NewFromInt(int64(user.UsedQuota)).Div(decimal.NewFromInt(500000)).StringFixed(2),
 		Status:    fmt.Sprintf("%d", user.Status),
-		CreatedAt: user.CreatedAt.Format(time.RFC3339),
+		CreatedAt: "",
 	}, nil
 }
 
@@ -622,7 +623,7 @@ func SetUserStatusByAdmin(userId uint, status, reason string) error {
 
 // RecordAdminAudit 记录管理操作审计
 func RecordAdminAudit(adminId int, operation, targetId, targetType string, c *gin.Context) {
-	log := ttmodel.AdminAuditLog{
+	log := AdminAuditLog{
 		AdminId:   uint(adminId),
 		AdminName: fmt.Sprintf("admin_%d", adminId),
 		Operation: operation,
@@ -915,19 +916,19 @@ func (PoolAccount) TableName() string {
 	return "pool_accounts"
 }
 
-func ListAllPricing() ([]ttmodel.ModelPricing, error) {
-	var pricing []ttmodel.ModelPricing
+func ListAllPricing() ([]ModelPricing, error) {
+	var pricing []ModelPricing
 	err := DB.Find(&pricing).Error
 	return pricing, err
 }
 
 // GetModelPricing 获取单个模型的定价
-func GetModelPricing(modelName string) (*ttmodel.ModelPricing, error) {
-	var pricing ttmodel.ModelPricing
+func GetModelPricing(modelName string) (*ModelPricing, error) {
+	var pricing ModelPricing
 	err := DB.Where("model = ? AND is_active = ?", modelName, true).First(&pricing).Error
 	if err != nil {
 		// 尝试从默认定价中查找
-		for _, p := range ttmodel.DefaultModelPricing {
+		for _, p := range DefaultModelPricing {
 			if p.Model == modelName {
 				return &p, nil
 			}
@@ -952,8 +953,8 @@ func CalculateCost(modelName string, inputTokens, outputTokens int64) (string, e
 	return totalCost.StringFixed(6), nil
 }
 
-func CreateModelPricing(modelName, inputPrice, outputPrice, perImagePrice, perSecondPrice, perCharPrice string) (*ttmodel.ModelPricing, error) {
-	pricing := ttmodel.ModelPricing{
+func CreateModelPricing(modelName, inputPrice, outputPrice, perImagePrice, perSecondPrice, perCharPrice string) (*ModelPricing, error) {
+	pricing := ModelPricing{
 		Model:    modelName,
 		IsActive: true,
 	}
@@ -1045,17 +1046,17 @@ func UpdateModelPricing(id uint, inputPrice, outputPrice, perImagePrice, perSeco
 		return nil
 	}
 
-	return DB.Model(&ttmodel.ModelPricing{}).Where("id = ?", id).Updates(updates).Error
+	return DB.Model(&ModelPricing{}).Where("id = ?", id).Updates(updates).Error
 }
 
-func GetAllPlans() ([]ttmodel.Plan, error) {
-	var plans []ttmodel.Plan
+func GetAllPlans() ([]Plan, error) {
+	var plans []Plan
 	err := DB.Order("sort_order").Find(&plans).Error
 	return plans, err
 }
 
-func CreatePlanByAdmin(name, displayName, description, monthlyPrice, includedUSD, discountRate string, maxAPIKeys, maxSubAccounts int, features string) (*ttmodel.Plan, error) {
-	plan := ttmodel.Plan{
+func CreatePlanByAdmin(name, displayName, description, monthlyPrice, includedUSD, discountRate string, maxAPIKeys, maxSubAccounts int, features string) (*Plan, error) {
+	plan := Plan{
 		Name:        name,
 		DisplayName: displayName,
 		Description: description,
@@ -1146,7 +1147,7 @@ func UpdatePlanByAdmin(id uint, displayName, description, monthlyPrice, included
 		return nil
 	}
 
-	return DB.Model(&ttmodel.Plan{}).Where("id = ?", id).Updates(updates).Error
+	return DB.Model(&Plan{}).Where("id = ?", id).Updates(updates).Error
 }
 
 func GetFinanceOverview() (*FinanceOverview, error) {
@@ -1157,18 +1158,14 @@ func GetRevenueReport(startDate, endDate string) (*RevenueReport, error) {
 	return &RevenueReport{}, nil
 }
 
-func GetCostReport(startDate, endDate string) (*CostReport, error) {
-	return &CostReport{}, nil
-}
-
 func ListPaymentsForAdmin(page, pageSize, status string) ([]interface{}, int64, error) {
 	return []interface{}{}, 0, nil
 }
 
-func ListAuditLogsForAdmin(page, pageSize, adminId, operation, startDate, endDate string) ([]ttmodel.AdminAuditLog, int64, error) {
-	var logs []ttmodel.AdminAuditLog
+func ListAuditLogsForAdmin(page, pageSize, adminId, operation, startDate, endDate string) ([]AdminAuditLog, int64, error) {
+	var logs []AdminAuditLog
 	var total int64
-	DB.Model(&ttmodel.AdminAuditLog{}).Count(&total)
+	DB.Model(&AdminAuditLog{}).Count(&total)
 	DB.Find(&logs)
 	return logs, total, nil
 }
@@ -1188,7 +1185,7 @@ func UpdateSystemSettings(req Settings) error {
 }
 
 func ListWebhooksForAdmin() ([]interface{}, error) {
-	var webhooks []ttmodel.Webhook
+	var webhooks []Webhook
 	err := DB.Order("created_at DESC").Find(&webhooks).Error
 	if err != nil {
 		return nil, err
@@ -1202,7 +1199,7 @@ func ListWebhooksForAdmin() ([]interface{}, error) {
 }
 
 func CreateWebhookByAdmin(name, webhookURL, events string) (interface{}, error) {
-	webhook := ttmodel.Webhook{
+	webhook := Webhook{
 		Name:     name,
 		URL:      webhookURL,
 		Events:   events,
@@ -1235,15 +1232,15 @@ func UpdateWebhookByAdmin(id uint, name, webhookURL, events string) error {
 		return nil
 	}
 
-	return DB.Model(&ttmodel.Webhook{}).Where("id = ?", id).Updates(updates).Error
+	return DB.Model(&Webhook{}).Where("id = ?", id).Updates(updates).Error
 }
 
 func DeleteWebhookByAdmin(id uint) error {
-	return DB.Delete(&ttmodel.Webhook{}, id).Error
+	return DB.Delete(&Webhook{}, id).Error
 }
 
 func TestWebhookByAdmin(id uint) (interface{}, error) {
-	var webhook ttmodel.Webhook
+	var webhook Webhook
 	err := DB.First(&webhook, id).Error
 	if err != nil {
 		return nil, errors.New("Webhook 不存在")
@@ -1281,12 +1278,12 @@ func generateWebhookSecret() string {
 }
 
 // SendWebhookRequest 发送 Webhook 请求
-func SendWebhookRequest(webhook *ttmodel.Webhook, event string, payload map[string]interface{}) error {
+func SendWebhookRequest(webhook *Webhook, event string, payload map[string]interface{}) error {
 	payload["event"] = event
 	payload["timestamp"] = time.Now().Unix()
 	payload["webhook_id"] = webhook.Id
 
-	body, err := common.Marshal(payload)
+	_, err := common.Marshal(payload)
 	if err != nil {
 		return err
 	}
@@ -1309,7 +1306,7 @@ func SendWebhookRequest(webhook *ttmodel.Webhook, event string, payload map[stri
 // TriggerWebhook 触发 Webhook
 func TriggerWebhook(event string, payload map[string]interface{}) {
 	// 查找订阅了该事件的所有活跃 webhook
-	var webhooks []ttmodel.Webhook
+	var webhooks []Webhook
 	err := DB.Where("is_active = ? AND events LIKE ?", true, "%"+event+"%").Find(&webhooks).Error
 	if err != nil {
 		return
@@ -1350,17 +1347,6 @@ type RevenueItem struct {
 	Amount string `json:"amount"`
 }
 
-type CostReport struct {
-	Period  string        `json:"period"`
-	Data    []CostItem    `json:"data"`
-	ByModel []CostItem    `json:"by_model"`
-}
-
-type CostItem struct {
-	Name   string `json:"name"`
-	Amount string `json:"amount"`
-}
-
 type Settings struct {
 	TrialAmount        string `json:"trial_amount"`
 	MinRecharge        string `json:"min_recharge"`
@@ -1373,8 +1359,8 @@ type Settings struct {
 // ========== 管理员管理 ==========
 
 // GetAdminById 根据ID获取管理员
-func GetAdminById(id uint) (*ttmodel.Admin, error) {
-	var admin ttmodel.Admin
+func GetAdminById(id uint) (*Admin, error) {
+	var admin Admin
 	err := DB.First(&admin, id).Error
 	if err != nil {
 		return nil, err
@@ -1383,8 +1369,8 @@ func GetAdminById(id uint) (*ttmodel.Admin, error) {
 }
 
 // GetAdminByUsername 根据用户名获取管理员
-func GetAdminByUsername(username string) (*ttmodel.Admin, error) {
-	var admin ttmodel.Admin
+func GetAdminByUsername(username string) (*Admin, error) {
+	var admin Admin
 	err := DB.Where("username = ?", username).First(&admin).Error
 	if err != nil {
 		return nil, err
@@ -1393,8 +1379,8 @@ func GetAdminByUsername(username string) (*ttmodel.Admin, error) {
 }
 
 // CreateAdmin 创建管理员
-func CreateAdmin(username, email, passwordHash string, role ttmodel.AdminRole) (*ttmodel.Admin, error) {
-	admin := ttmodel.Admin{
+func CreateAdmin(username, email, passwordHash string, role AdminRole) (*Admin, error) {
+	admin := Admin{
 		Username:     username,
 		Email:        email,
 		PasswordHash: passwordHash,
@@ -1410,14 +1396,14 @@ func CreateAdmin(username, email, passwordHash string, role ttmodel.AdminRole) (
 
 // UpdateAdminTOTP 更新管理员TOTP密钥
 func UpdateAdminTOTP(adminId uint, totpSecret string) error {
-	return DB.Model(&ttmodel.Admin{}).Where("id = ?", adminId).
+	return DB.Model(&Admin{}).Where("id = ?", adminId).
 		Update("totp_secret", totpSecret).Error
 }
 
 // UpdateAdminLastLogin 更新管理员最后登录时间
 func UpdateAdminLastLogin(adminId uint) error {
 	now := time.Now()
-	return DB.Model(&ttmodel.Admin{}).Where("id = ?", adminId).
+	return DB.Model(&Admin{}).Where("id = ?", adminId).
 		Update("last_login_at", now).Error
 }
 
@@ -1431,13 +1417,13 @@ func GetChannelByModel(modelName string) (interface{}, error) {
 // ========== 预算管理 ==========
 
 // GetBudgetConfig 获取用户预算配置
-func GetBudgetConfig(userId uint) (*ttmodel.UserBudgetConfig, error) {
-	var config ttmodel.UserBudgetConfig
+func GetBudgetConfig(userId uint) (*UserBudgetConfig, error) {
+	var config UserBudgetConfig
 	err := DB.Where("user_id = ?", userId).First(&config).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 返回默认配置
-			return &ttmodel.UserBudgetConfig{
+			return &UserBudgetConfig{
 				UserId:         userId,
 				DailyLimit:     0,
 				MonthlyLimit:   0,
@@ -1452,8 +1438,8 @@ func GetBudgetConfig(userId uint) (*ttmodel.UserBudgetConfig, error) {
 }
 
 // SetBudgetConfig 设置用户预算配置
-func SetBudgetConfig(userId uint, dailyLimit, monthlyLimit, alertThreshold float64, notifyEmail, notifyWebhook bool) (*ttmodel.UserBudgetConfig, error) {
-	config := ttmodel.UserBudgetConfig{
+func SetBudgetConfig(userId uint, dailyLimit, monthlyLimit, alertThreshold float64, notifyEmail, notifyWebhook bool) (*UserBudgetConfig, error) {
+	config := UserBudgetConfig{
 		UserId:         userId,
 		DailyLimit:     dailyLimit,
 		MonthlyLimit:   monthlyLimit,
@@ -1496,13 +1482,13 @@ func GetBudgetStatus(userId uint) (*BudgetStatus, error) {
 
 	// 计算今日消费
 	var dailyUsed decimal.Decimal
-	DB.Model(&ttmodel.ConsumptionRecord{}).
+	DB.Model(&ConsumptionRecord{}).
 		Where("user_id = ? AND created_at >= ?", userId, today).
 		Select("COALESCE(SUM(actual_cost_usd), 0)").Scan(&dailyUsed)
 
 	// 计算本月消费
 	var monthlyUsed decimal.Decimal
-	DB.Model(&ttmodel.ConsumptionRecord{}).
+	DB.Model(&ConsumptionRecord{}).
 		Where("user_id = ? AND created_at >= ?", userId, monthStart).
 		Select("COALESCE(SUM(actual_cost_usd), 0)").Scan(&monthlyUsed)
 
@@ -1564,7 +1550,7 @@ func CheckAndSendBudgetAlert(userId uint) error {
 	})
 
 	// 标记已发送
-	return DB.Model(&ttmodel.UserBudgetConfig{}).
+	return DB.Model(&UserBudgetConfig{}).
 		Where("user_id = ?", userId).
 		Update("alert_sent", true).Error
 }
@@ -1573,7 +1559,7 @@ func CheckAndSendBudgetAlert(userId uint) error {
 func ResetBudgetAlertMonthly() {
 	now := time.Now()
 	if now.Day() == 1 {
-		DB.Model(&ttmodel.UserBudgetConfig{}).
+		DB.Model(&UserBudgetConfig{}).
 			Where("alert_sent = ?", true).
 			Update("alert_sent", false)
 	}
@@ -1595,7 +1581,7 @@ type CallLog struct {
 
 // GetCallLogs 获取调用日志列表
 func GetCallLogs(userId uint, page, pageSize, model string, startTime, endTime *time.Time) ([]CallLog, int64, error) {
-	query := DB.Model(&ttmodel.ConsumptionRecord{}).Where("user_id = ?", userId)
+	query := DB.Model(&ConsumptionRecord{}).Where("user_id = ?", userId)
 
 	if model != "" {
 		query = query.Where("model = ?", model)
@@ -1611,7 +1597,7 @@ func GetCallLogs(userId uint, page, pageSize, model string, startTime, endTime *
 	query.Count(&total)
 
 	offset, limit := parsePagination(page, pageSize)
-	var records []ttmodel.ConsumptionRecord
+	var records []ConsumptionRecord
 	err := query.Order("created_at DESC").Offset(offset).Limit(limit).Find(&records).Error
 	if err != nil {
 		return nil, 0, err
@@ -1636,7 +1622,7 @@ func GetCallLogs(userId uint, page, pageSize, model string, startTime, endTime *
 
 // GetCallLogDetail 获取单条调用日志详情
 func GetCallLogDetail(userId uint, logId uint) (*CallLogDetail, error) {
-	var record ttmodel.ConsumptionRecord
+	var record ConsumptionRecord
 	err := DB.Where("id = ? AND user_id = ?", logId, userId).First(&record).Error
 	if err != nil {
 		return nil, err

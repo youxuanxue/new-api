@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	ttmodel "github.com/QuantumNous/new-api/model"
 
 	"github.com/shopspring/decimal"
@@ -191,7 +192,7 @@ func (s *ReferralService) ProcessFirstCharge(userId int) error {
 	}
 
 	// 发放奖励
-	config := ttmodel.DefaultReferralConfig
+	_ = ttmodel.DefaultReferralConfig
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		// 更新邀请记录状态
 		now := time.Now()
@@ -278,9 +279,14 @@ type SubscriptionStatus struct {
 func (s *SubscriptionService) RenewSubscription(userId int) error {
 	var sub ttmodel.Subscription
 	err := s.db.Where("user_id = ? AND status IN ?", userId, []string{"active", "cancelled"}).
-		Preload("Plan").First(&sub).Error
+		First(&sub).Error
 	if err != nil {
 		return errors.New("no active subscription")
+	}
+
+	var plan ttmodel.Plan
+	if err := s.db.First(&plan, sub.PlanId).Error; err != nil {
+		return errors.New("plan not found")
 	}
 
 	// 计算新的过期时间
@@ -295,7 +301,7 @@ func (s *SubscriptionService) RenewSubscription(userId int) error {
 	updates := map[string]interface{}{
 		"expires_at":    newExpires,
 		"status":        "active",
-		"remaining_usd": sub.Plan.IncludedUSD,
+		"remaining_usd": plan.IncludedUSD,
 		"used_usd":      0,
 	}
 
@@ -466,6 +472,13 @@ func (s *BudgetService) CheckBudget(userId uint, config *BudgetConfig) (*BudgetS
 	}
 	if config.MonthlyLimit > 0 && status.MonthlyUsed/config.MonthlyLimit >= threshold {
 		status.MonthlyAlert = true
+	}
+
+	if status.DailyExceeded || status.MonthlyExceeded {
+		common.SendFeishuAlert("用户预算超限",
+			fmt.Sprintf("用户ID: %d\n日用量: $%.2f / $%.2f\n月用量: $%.2f / $%.2f",
+				config.UserId, status.DailyUsed, config.DailyLimit, status.MonthlyUsed, config.MonthlyLimit),
+			common.AlertWarning)
 	}
 
 	return status, nil

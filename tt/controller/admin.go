@@ -4,9 +4,7 @@ package controller
 import (
 	"net/http"
 	"strconv"
-	"time"
 
-	"github.com/QuantumNous/new-api/common"
 	ttmodel "github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
@@ -663,12 +661,14 @@ func GetRevenueReport(c *gin.Context) {
 	c.JSON(http.StatusOK, report)
 }
 
-// GetCostReport 获取成本报告
-func GetCostReport(c *gin.Context) {
-	startDate := c.Query("start_date")
-	endDate := c.Query("end_date")
+// GetAdminCostReport 获取管理端成本报告
+func GetAdminCostReport(c *gin.Context) {
+	req := ttmodel.CostReportRequest{
+		StartDate: c.Query("start_date"),
+		EndDate:   c.Query("end_date"),
+	}
 
-	report, err := ttmodel.GetCostReport(startDate, endDate)
+	report, err := ttmodel.GetCostReport(0, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get cost report"})
 		return
@@ -766,7 +766,7 @@ func UpdateSettings(c *gin.Context) {
 	adminId := c.GetInt("admin_id")
 	ttmodel.RecordAdminAudit(adminId, "UPDATE_SETTINGS", "", "settings", c)
 
-	err := ttmodel.UpdateSystemSettings(req)
+	err := ttmodel.UpdateSystemSettings(ttmodel.Settings(req))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

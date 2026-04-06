@@ -4,25 +4,33 @@ Copyright (C) 2026 TokenKey
 */
 
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Typography, Button, Table, Tag, Modal, Form, Input, InputNumber, Select, Switch, message, Spin, Statistic, Progress, Tabs, TabPane } from '@douyinfe/semi-ui';
+import { Card, Row, Col, Typography, Button, Table, Tag, Modal, Form, Input, InputNumber, Select, Switch, Toast, Spin, Progress, Tabs, TabPane } from '@douyinfe/semi-ui';
 import {
-  IconDashboard,
-  IconUsers,
+  IconUserGroup,
   IconServer,
-  IconKey,
   IconCreditCard,
-  IconSettings,
   IconBell,
   IconRefresh,
   IconAlertTriangle,
-  IconCheckCircle,
-  IconXCircle,
-  IconTrendingUp,
-  IconTrendingDown,
+  IconCheckCircleStroked,
+  IconPlus,
 } from '@douyinfe/semi-icons';
-import { API } from '../../helpers/api';
+import { API } from '../../../helpers/api';
 
 const { Title, Text, Paragraph } = Typography;
+
+const MetricStat = ({ title, value, suffix = '', prefix = '', icon = null, valueColor = '' }) => {
+  const formattedValue = typeof value === 'number' ? value.toLocaleString() : value;
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <Text type="secondary" size="small">{title}</Text>
+        <Title heading={4} className={`mb-0 ${valueColor}`}>{`${prefix}${formattedValue}${suffix}`}</Title>
+      </div>
+      {icon}
+    </div>
+  );
+};
 
 // 仪表盘概览卡片
 const DashboardOverview = ({ stats }) => {
@@ -41,28 +49,27 @@ const DashboardOverview = ({ stats }) => {
     <Row gutter={[16, 16]}>
       <Col span={6}>
         <Card className="tt-stat-card">
-          <Statistic
+          <MetricStat
             title="用户总数"
             value={totalUsers}
             suffix={`(${activeUsers} 活跃)`}
-            icon={<IconUsers className="text-blue-500" />}
+            icon={<IconUserGroup className="text-blue-500" />}
           />
         </Card>
       </Col>
       <Col span={6}>
         <Card className="tt-stat-card">
-          <Statistic
+          <MetricStat
             title="本月收入"
             value={monthlyRevenue}
             prefix="$"
-            precision={2}
             icon={<IconCreditCard className="text-green-500" />}
           />
         </Card>
       </Col>
       <Col span={6}>
         <Card className="tt-stat-card">
-          <Statistic
+          <MetricStat
             title="今日请求"
             value={totalRequests}
             icon={<IconServer className="text-purple-500" />}
@@ -71,11 +78,11 @@ const DashboardOverview = ({ stats }) => {
       </Col>
       <Col span={6}>
         <Card className="tt-stat-card">
-          <Statistic
+          <MetricStat
             title="可用率"
             value={avgAvailability}
             suffix="%"
-            icon={<IconCheckCircle className="text-emerald-500" />}
+            icon={<IconCheckCircleStroked className="text-emerald-500" />}
           />
         </Card>
       </Col>
@@ -103,16 +110,16 @@ const PoolStatusCard = ({ poolStats, onRefresh }) => {
     >
       <Row gutter={16}>
         <Col span={6}>
-          <Statistic title="总数" value={total} />
+          <MetricStat title="总数" value={total} />
         </Col>
         <Col span={6}>
-          <Statistic title="可用" value={available} valueStyle={{ color: '#10b981' }} />
+          <MetricStat title="可用" value={available} valueColor="text-green-600" />
         </Col>
         <Col span={6}>
-          <Statistic title="冷却" value={cooldown} valueStyle={{ color: '#f59e0b' }} />
+          <MetricStat title="冷却" value={cooldown} valueColor="text-amber-500" />
         </Col>
         <Col span={6}>
-          <Statistic title="封禁" value={banned} valueStyle={{ color: '#ef4444' }} />
+          <MetricStat title="封禁" value={banned} valueColor="text-red-500" />
         </Col>
       </Row>
 
@@ -195,7 +202,7 @@ const UserManagementCard = ({ users, onAdjustBalance, onSetStatus, loading }) =>
     <Card className="tt-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <IconUsers size={18} className="text-blue-500" />
+          <IconUserGroup size={18} className="text-blue-500" />
           <Text strong>用户管理</Text>
         </div>
       </div>
@@ -385,7 +392,7 @@ const AdminConsole = () => {
       setLogs(logsRes.data.data || []);
     } catch (error) {
       console.error('Failed to fetch admin data:', error);
-      message.error('获取数据失败');
+      Toast.error('获取数据失败');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -406,11 +413,11 @@ const AdminConsole = () => {
       await API.post(`/admin/users/${selectedUserId}/adjust-balance`, {
         amount: adjustAmount
       });
-      message.success('余额已调整');
+      Toast.success('余额已调整');
       setAdjustBalanceModalVisible(false);
       fetchData(false);
     } catch (error) {
-      message.error('调整失败');
+      Toast.error('调整失败');
     }
   };
 
@@ -419,11 +426,11 @@ const AdminConsole = () => {
       await API.post(`/admin/users/${selectedUserId}/status`, {
         status: newStatus
       });
-      message.success('状态已更新');
+      Toast.success('状态已更新');
       setSetStatusModalVisible(false);
       fetchData(false);
     } catch (error) {
-      message.error('操作失败');
+      Toast.error('操作失败');
     }
   };
 
@@ -431,12 +438,12 @@ const AdminConsole = () => {
     try {
       const res = await API.post(`/admin/channels/${channelId}/test`);
       if (res.data.success) {
-        message.success('渠道正常');
+        Toast.success('渠道正常');
       } else {
-        message.error('渠道异常');
+        Toast.error('渠道异常');
       }
     } catch (error) {
-      message.error('测试失败');
+      Toast.error('测试失败');
     }
   };
 
@@ -540,4 +547,5 @@ const AdminConsole = () => {
   );
 };
 
+export { AdminConsole };
 export default AdminConsole;

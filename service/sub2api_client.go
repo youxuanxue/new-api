@@ -421,10 +421,10 @@ func runPoolSyncOnce() {
 	// 同步账号
 	result, err := SyncPoolAccounts(ctx, client)
 	if err != nil {
-		logger.LogError(nil, "[Sub2API] Pool sync failed: %v", err)
+		logger.LogError(nil, fmt.Sprintf("[Sub2API] Pool sync failed: %v", err))
 		return
 	}
 
-	logger.LogInfo(nil, "[Sub2API] Pool sync completed: added=%d, updated=%d, removed=%d, errors=%d",
-		result.Added, result.Updated, result.Removed, result.Errors)
+	logger.LogInfo(nil, fmt.Sprintf("[Sub2API] Pool sync completed: added=%d, updated=%d, removed=%d, errors=%d",
+		result.Added, result.Updated, result.Removed, result.Errors))
 }

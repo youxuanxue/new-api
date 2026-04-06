@@ -4,9 +4,9 @@ Copyright (C) 2026 TokenKey
 */
 
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Typography, Progress, Button, Table, Tag, Modal, Form, Input, InputNumber, Select, message, Spin, Empty } from '@douyinfe/semi-ui';
-import { IconCreditCard, IconGraph, IconKey, IconUsers, IconTrendingUp, IconAlertTriangle, IconRefresh, IconPlus, IconDelete, IconCopy } from '@douyinfe/semi-icons';
-import { API } from '../../helpers/api';
+import { Card, Row, Col, Typography, Progress, Button, Table, Tag, Modal, Form, Input, InputNumber, Select, Toast, Spin, Empty } from '@douyinfe/semi-ui';
+import { IconCreditCard, IconPulse, IconKey, IconUserGroup, IconAlertTriangle, IconRefresh, IconPlus, IconDelete, IconCopy } from '@douyinfe/semi-icons';
+import { API } from '../../../helpers/api';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -51,7 +51,7 @@ const UsageCard = ({ usage }) => {
   return (
     <Card className="tt-card tt-usage-card">
       <div className="flex items-center gap-2 mb-4">
-        <IconGraph size={20} className="text-purple-500" />
+        <IconPulse size={20} className="text-purple-500" />
         <Text strong>今日用量</Text>
       </div>
 
@@ -92,7 +92,7 @@ const APIKeyCard = ({ keys, onCreate, onRevoke, loading }) => {
 
   const handleCreate = async () => {
     if (!form.name) {
-      message.error('请输入 Key 名称');
+      Toast.error('请输入 Key 名称');
       return;
     }
     await onCreate(form);
@@ -114,7 +114,7 @@ const APIKeyCard = ({ keys, onCreate, onRevoke, loading }) => {
             icon={<IconCopy />}
             onClick={() => {
               navigator.clipboard.writeText(key);
-              message.success('已复制到剪贴板');
+              Toast.success('已复制到剪贴板');
             }}
           />
         </div>
@@ -265,7 +265,7 @@ const TeamCard = ({ teams, onViewTeam }) => {
     <Card className="tt-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <IconUsers size={20} className="text-indigo-500" />
+          <IconUserGroup size={20} className="text-indigo-500" />
           <Text strong>我的团队</Text>
         </div>
         <Button type="tertiary" size="small" onClick={() => onViewTeam(null)}>
@@ -326,7 +326,7 @@ const UserDashboard = () => {
       setTeams(teamsRes.data.data || []);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
-      message.error('获取数据失败');
+      Toast.error('获取数据失败');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -345,20 +345,20 @@ const UserDashboard = () => {
   const handleCreateKey = async (data) => {
     try {
       await API.post('/api/key', data);
-      message.success('创建成功');
+      Toast.success('创建成功');
       fetchData(false);
     } catch (error) {
-      message.error('创建失败');
+      Toast.error('创建失败');
     }
   };
 
   const handleRevokeKey = async (keyId) => {
     try {
       await API.delete(`/api/key/${keyId}`);
-      message.success('已吊销');
+      Toast.success('已吊销');
       fetchData(false);
     } catch (error) {
-      message.error('操作失败');
+      Toast.error('操作失败');
     }
   };
 
@@ -423,4 +423,5 @@ const UserDashboard = () => {
   );
 };
 
+export { UserDashboard };
 export default UserDashboard;

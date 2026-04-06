@@ -84,7 +84,7 @@ func callModelAPI(c *gin.Context, modelName string, messages []dto.Message, maxT
 	req := &dto.GeneralOpenAIRequest{
 		Model:    modelName,
 		Messages: messages,
-		Stream:   isStream,
+		Stream:   &isStream,
 	}
 
 	if maxTokens != nil {
@@ -179,16 +179,14 @@ func callModelAPI(c *gin.Context, modelName string, messages []dto.Message, maxT
 	// 提取响应内容
 	if len(openaiResp.Choices) > 0 {
 		choice := openaiResp.Choices[0]
-		if choice.Message != nil {
-			result.Response = choice.Message.StringContent()
-		}
+		result.Response = choice.Message.StringContent()
 		result.FinishReason = choice.FinishReason
 	}
 
 	// 提取 usage 信息
-	if openaiResp.Usage != nil {
-		result.InputTokens = openaiResp.Usage.PromptTokens
-		result.OutputTokens = openaiResp.Usage.CompletionTokens
+	if openaiResp.Usage.PromptTokens > 0 || openaiResp.Usage.CompletionTokens > 0 {
+		result.InputTokens = int64(openaiResp.Usage.PromptTokens)
+		result.OutputTokens = int64(openaiResp.Usage.CompletionTokens)
 
 		// 使用实际的定价计算成本
 		cost, err := ttmodel.CalculateCost(modelName, result.InputTokens, result.OutputTokens)
@@ -560,11 +558,11 @@ func GetPlaygroundHistory(c *gin.Context) {
 	}
 
 	// 转换为响应格式
-	result := make([]PlaygroundHistoryResponse, len(histories))
+	result := make([]PlaygroundHistory, len(histories))
 	for i, h := range histories {
 		var models []string
 		json.Unmarshal([]byte(h.Models), &models)
-		result[i] = PlaygroundHistoryResponse{
+		result[i] = PlaygroundHistory{
 			Id:        fmt.Sprintf("%d", h.Id),
 			UserId:    h.UserId,
 			Models:    models,
@@ -578,18 +576,9 @@ func GetPlaygroundHistory(c *gin.Context) {
 
 // SavePlaygroundHistory 保存 Playground 历史记录
 type SavePlaygroundHistoryRequest struct {
-	Models []string      `json:"models"`
-	Prompt string        `json:"prompt"`
+	Models []string        `json:"models"`
+	Prompt string          `json:"prompt"`
 	Result PlaygroundResult `json:"result"`
-}
-
-// PlaygroundResult 单次 Playground 结果
-type PlaygroundResult struct {
-	Model        string `json:"model"`
-	Response      string `json:"response"`
-	InputTokens  int64  `json:"input_tokens"`
-	OutputTokens int64  `json:"output_tokens"`
-	CostUSD      string `json:"cost_usd"`
 }
 
 // SavePlaygroundHistory 保存 Playground 历史记录到数据库

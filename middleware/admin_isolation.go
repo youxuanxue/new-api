@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -223,7 +224,7 @@ func verifyTOTP(secret, code string) bool {
 		Period:    30,
 		Skew:      1,
 		Digits:    6,
-		Algorithm: "SHA1",
+		Algorithm: otp.AlgorithmSHA1,
 	})
 	if err != nil {
 		log.Printf("[ERROR] TOTP validation error: %v", err)

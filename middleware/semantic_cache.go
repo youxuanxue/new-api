@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
@@ -210,7 +209,7 @@ func (sc *SemanticCache) GetCachedResponse(c *gin.Context, request *dto.GeneralO
 			if entry.RequestHash == requestHash && !entry.ExpiresAt.Before(time.Now()) {
 				entry.HitCount++
 				sc.hitCount++
-				logger.LogInfo(c, "[SemanticCache] Exact match hit for model %s", request.Model)
+				logger.LogInfo(c, fmt.Sprintf("[SemanticCache] Exact match hit for model %s", request.Model))
 				return entry, true
 			}
 		}
@@ -235,7 +234,7 @@ func (sc *SemanticCache) GetCachedResponse(c *gin.Context, request *dto.GeneralO
 					if similarity >= sc.config.SimilarityThreshold {
 						entry.HitCount++
 						sc.hitCount++
-						logger.LogInfo(c, "[SemanticCache] Semantic match hit for model %s (similarity: %.2f)", request.Model, similarity)
+						logger.LogInfo(c, fmt.Sprintf("[SemanticCache] Semantic match hit for model %s (similarity: %.2f)", request.Model, similarity))
 						return entry, true
 					}
 				}
@@ -289,7 +288,7 @@ func (sc *SemanticCache) SetCachedResponse(c *gin.Context, request *dto.GeneralO
 	}
 
 	sc.entries[entry.Key] = entry
-	logger.LogInfo(c, "[SemanticCache] Cached response for model %s", request.Model)
+	logger.LogInfo(c, fmt.Sprintf("[SemanticCache] Cached response for model %s", request.Model))
 }
 
 // cleanupExpired 清理过期条目
@@ -548,7 +547,7 @@ func ClearCacheAPI(c *gin.Context) {
 // init 初始化
 func init() {
 	// 从环境变量读取配置
-	if common.GetEnvOrDefault("TT_SEMANTIC_CACHE_ENABLED", "true") == "false" {
+	if common.GetEnvOrDefaultString("TT_SEMANTIC_CACHE_ENABLED", "true") == "false" {
 		currentCacheConfig.Enabled = false
 	}
 }

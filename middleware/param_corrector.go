@@ -3,6 +3,7 @@
 package middleware
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -189,7 +190,7 @@ func CorrectRequest(c *gin.Context, request dto.Request) *CorrectionResult {
 			result.WasAdjusted = true
 			request.SetModelName(correctedModel)
 			modelName = correctedModel
-			logger.LogInfo(c, "[ParamCorrector] Model alias corrected: %s -> %s", result.OriginalModel, correctedModel)
+			logger.LogInfo(c, fmt.Sprintf("[ParamCorrector] Model alias corrected: %s -> %s", result.OriginalModel, correctedModel))
 		}
 	}
 
@@ -201,7 +202,7 @@ func CorrectRequest(c *gin.Context, request dto.Request) *CorrectionResult {
 			result.WasAdjusted = true
 			request.SetModelName(replacement)
 			modelName = replacement
-			logger.LogInfo(c, "[ParamCorrector] Deprecated model forwarded: %s -> %s", result.OriginalModel, replacement)
+			logger.LogInfo(c, fmt.Sprintf("[ParamCorrector] Deprecated model forwarded: %s -> %s", result.OriginalModel, replacement))
 		}
 	}
 
@@ -214,7 +215,7 @@ func CorrectRequest(c *gin.Context, request dto.Request) *CorrectionResult {
 			result.CorrectedMaxTokens = limit
 			result.WasAdjusted = true
 			setMaxTokens(request, limit)
-			logger.LogInfo(c, "[ParamCorrector] max_tokens corrected: %d -> %d (model limit)", maxTokens, limit)
+			logger.LogInfo(c, fmt.Sprintf("[ParamCorrector] max_tokens corrected: %d -> %d (model limit)", maxTokens, limit))
 		}
 	}
 
@@ -230,7 +231,7 @@ func CorrectRequest(c *gin.Context, request dto.Request) *CorrectionResult {
 
 	// 将纠错结果存储到上下文
 	if result.WasAdjusted {
-		c.Set(constant.ContextKeyParamCorrection, result)
+		c.Set(string(constant.ContextKeyParamCorrection), result)
 	}
 
 	return result
@@ -252,7 +253,7 @@ func getModelName(request dto.Request) string {
 	case *dto.RerankRequest:
 		return r.Model
 	case *dto.GeminiChatRequest:
-		return r.Model
+		return ""
 	}
 	return ""
 }
@@ -281,8 +282,8 @@ func setMaxTokens(request dto.Request, value uint) {
 	case *dto.GeneralOpenAIRequest:
 		r.MaxTokens = common.GetPointer(value)
 	case *dto.ClaudeRequest:
-		intVal := int(value)
-		r.MaxTokens = &intVal
+		v := value
+		r.MaxTokens = &v
 	}
 }
 
@@ -374,7 +375,7 @@ func shouldAutoCompleteStream(c *gin.Context, request dto.Request) bool {
 
 // GetCorrectionResult 从上下文获取纠错结果
 func GetCorrectionResult(c *gin.Context) *CorrectionResult {
-	if result, exists := c.Get(constant.ContextKeyParamCorrection); exists {
+	if result, exists := c.Get(string(constant.ContextKeyParamCorrection)); exists {
 		if correction, ok := result.(*CorrectionResult); ok {
 			return correction
 		}

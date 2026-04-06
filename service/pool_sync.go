@@ -4,11 +4,12 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
-	ttmodel "github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/logger"
+	ttmodel "github.com/QuantumNous/new-api/model"
 
 	"github.com/shopspring/decimal"
 )
@@ -83,7 +84,7 @@ func SyncPoolAccounts(ctx context.Context, client *Sub2APIClient) (*SyncResult, 
 			// 更新现有账号
 			if err := updateLocalAccount(localAcc.(ttmodel.PoolAccount), acc); err != nil {
 				result.Errors++
-				logger.LogError(nil, "[PoolSync] Failed to update account %s: %v", acc.Email, err)
+				logger.LogError(nil, fmt.Sprintf("[PoolSync] Failed to update account %s: %v", acc.Email, err))
 			} else {
 				result.Updated++
 			}
@@ -91,7 +92,7 @@ func SyncPoolAccounts(ctx context.Context, client *Sub2APIClient) (*SyncResult, 
 			// 添加新账号
 			if err := addLocalAccount(acc); err != nil {
 				result.Errors++
-				logger.LogError(nil, "[PoolSync] Failed to add account %s: %v", acc.Email, err)
+				logger.LogError(nil, fmt.Sprintf("[PoolSync] Failed to add account %s: %v", acc.Email, err))
 			} else {
 				result.Added++
 			}
@@ -103,7 +104,7 @@ func SyncPoolAccounts(ctx context.Context, client *Sub2APIClient) (*SyncResult, 
 		if !remoteSet[email] {
 			if err := ttmodel.RemovePoolAccountByEmail(email); err != nil {
 				result.Errors++
-				logger.LogError(nil, "[PoolSync] Failed to remove account %s: %v", email, err)
+				logger.LogError(nil, fmt.Sprintf("[PoolSync] Failed to remove account %s: %v", email, err))
 			} else {
 				result.Removed++
 			}
@@ -175,7 +176,7 @@ func RefreshExpiredTokens(ctx context.Context, client *Sub2APIClient) (int, int)
 	err := ttmodel.DB.Where("status = ? AND oauth_token IS NOT NULL AND oauth_token != ''", "available").
 		Find(&accounts).Error
 	if err != nil {
-		logger.LogError(nil, "[TokenRefresh] Failed to query accounts: %v", err)
+		logger.LogError(nil, fmt.Sprintf("[TokenRefresh] Failed to query accounts: %v", err))
 		return 0, 0
 	}
 
@@ -188,7 +189,7 @@ func RefreshExpiredTokens(ctx context.Context, client *Sub2APIClient) (int, int)
 			result, err := client.RefreshToken(ctx, acc.Email)
 			if err != nil {
 				failCount++
-				logger.LogError(nil, "[TokenRefresh] Failed to refresh token for %s: %v", acc.Email, err)
+				logger.LogError(nil, fmt.Sprintf("[TokenRefresh] Failed to refresh token for %s: %v", acc.Email, err))
 				continue
 			}
 
@@ -201,10 +202,10 @@ func RefreshExpiredTokens(ctx context.Context, client *Sub2APIClient) (int, int)
 				}
 				ttmodel.DB.Model(&acc).Updates(updates)
 				successCount++
-				logger.LogInfo(nil, "[TokenRefresh] Token refreshed for %s", acc.Email)
+				logger.LogInfo(nil, fmt.Sprintf("[TokenRefresh] Token refreshed for %s", acc.Email))
 			} else {
 				failCount++
-				logger.LogError(nil, "[TokenRefresh] Token refresh failed for %s: %s", acc.Email, result.Error)
+				logger.LogError(nil, fmt.Sprintf("[TokenRefresh] Token refresh failed for %s: %s", acc.Email, result.Error))
 			}
 		}
 	}
@@ -251,7 +252,7 @@ func DetectBannedAccounts(ctx context.Context, client *Sub2APIClient) ([]string,
 					"cooldown_end": nil,
 					"updated_at":   time.Now(),
 				})
-			logger.LogInfo(nil, "[BanDetect] Account %s detected as banned: %s", status.Email, status.BanReason)
+			logger.LogInfo(nil, fmt.Sprintf("[BanDetect] Account %s detected as banned: %s", status.Email, status.BanReason))
 		}
 	}
 
@@ -276,7 +277,7 @@ func AutoFailoverAccount(email string, reason string) error {
 		return err
 	}
 
-	logger.LogInfo(nil, "[Failover] Account %s set to cooldown for %v, reason: %s", email, config.CooldownDuration, reason)
+	logger.LogInfo(nil, fmt.Sprintf("[Failover] Account %s set to cooldown for %v, reason: %s", email, config.CooldownDuration, reason))
 
 	// 尝试获取下一个可用账号
 	var nextAccount ttmodel.PoolAccount
@@ -289,7 +290,7 @@ func AutoFailoverAccount(email string, reason string) error {
 		return nil // 没有可用账号不报错
 	}
 
-	logger.LogInfo(nil, "[Failover] Switched to account %s", nextAccount.Email)
+	logger.LogInfo(nil, fmt.Sprintf("[Failover] Switched to account %s", nextAccount.Email))
 	return nil
 }
 
@@ -381,20 +382,20 @@ func StartBanDetectionTask() {
 			client := NewSub2APIClient(sub2apiConfig.BaseURL, sub2apiConfig.APIKey)
 			banned, err := DetectBannedAccounts(ctx, client)
 			if err != nil {
-				logger.LogError(nil, "[BanDetect] Detection failed: %v", err)
+				logger.LogError(nil, fmt.Sprintf("[BanDetect] Detection failed: %v", err))
 				return
 			}
 
 			if len(banned) > 0 {
-				logger.LogInfo(nil, "[BanDetect] Detected %d banned accounts", len(banned))
+				logger.LogInfo(nil, fmt.Sprintf("[BanDetect] Detected %d banned accounts", len(banned)))
 			}
 
 			// 释放冷却完成的账号
 			released, err := ReleaseAccountCooldown()
 			if err != nil {
-				logger.LogError(nil, "[BanDetect] Failed to release cooldown accounts: %v", err)
+				logger.LogError(nil, fmt.Sprintf("[BanDetect] Failed to release cooldown accounts: %v", err))
 			} else if released > 0 {
-				logger.LogInfo(nil, "[BanDetect] Released %d accounts from cooldown", released)
+				logger.LogInfo(nil, fmt.Sprintf("[BanDetect] Released %d accounts from cooldown", released))
 			}
 		}()
 	}

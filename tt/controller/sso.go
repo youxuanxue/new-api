@@ -59,7 +59,7 @@ func GetSSOConfig(c *gin.Context) {
 		return
 	}
 
-	config, err := ttmodel.GetSSOConfig(common.String2Int(id))
+	config, err := ttmodel.GetSSOConfig(uint(common.String2Int(id)))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "SSO config not found"})
 		return
@@ -200,7 +200,7 @@ func DeleteSSOConfig(c *gin.Context) {
 		return
 	}
 
-	if err := ttmodel.DeleteSSOConfig(common.String2Int(id)); err != nil {
+	if err := ttmodel.DeleteSSOConfig(uint(common.String2Int(id))); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete SSO config"})
 		return
 	}
@@ -337,7 +337,7 @@ func HandleOIDCCallback(c *gin.Context) {
 	c.JSON(http.StatusOK, ttmodel.SSOLoginResponse{
 		Success:   true,
 		Token:     token,
-		UserId:    user.Id,
+		UserId:    uint(user.Id),
 		Email:     userInfo.Email,
 		ExpiresAt: expiresAt,
 		Message:   "Login successful",
@@ -459,7 +459,7 @@ func generateUserToken(user *ttmodel.User) (string, int64, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(common.GetEnvOrDefault("JWT_SECRET", "tokenkey-default-secret")))
+	tokenString, err := token.SignedString([]byte(common.GetEnvOrDefaultString("JWT_SECRET", "tokenkey-default-secret")))
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to sign token: %w", err)
 	}
@@ -482,7 +482,7 @@ func HandleSAMLCallback(c *gin.Context) {
 		return
 	}
 
-	logger.LogInfo(c, "[SAML] Received response: %s", string(decoded))
+	logger.LogInfo(c, fmt.Sprintf("[SAML] Received response: %s", string(decoded)))
 
 	// 解析 SAML Response
 	samlResp, err := parseSAMLResponse(decoded)
@@ -492,11 +492,18 @@ func HandleSAMLCallback(c *gin.Context) {
 		return
 	}
 
+	// 加载 SAML SSO 配置
+	samlConfig, err := ttmodel.GetSSOConfigByProvider(ttmodel.SSOProviderSAML)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SAML SSO not configured"})
+		return
+	}
+
 	// 验证 SAML 签名
-	if err := verifySAMLSignature(decoded, config.Certificate); err != nil {
+	if err := verifySAMLSignature(decoded, samlConfig.Certificate); err != nil {
 		logger.LogError(c, "[SAML] Signature verification failed: "+err.Error())
 		// 在开发环境中，允许跳过签名验证
-		if common.GetEnvOrDefault("SAML_SKIP_SIGNATURE_CHECK", "false") != "true" {
+		if common.GetEnvOrDefaultString("SAML_SKIP_SIGNATURE_CHECK", "false") != "true" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "SAML signature verification failed"})
 			return
 		}
@@ -544,7 +551,7 @@ func HandleSAMLCallback(c *gin.Context) {
 	c.JSON(http.StatusOK, ttmodel.SSOLoginResponse{
 		Success:   true,
 		Token:     token,
-		UserId:    user.Id,
+		UserId:    uint(user.Id),
 		Email:     email,
 		ExpiresAt: expiresAt,
 		Message:   "SAML login successful",
