@@ -16,8 +16,6 @@ import (
 
 // initTT registers TT-specific routes
 func initTT(router *gin.Engine) {
-	common.InitFeishuAlert()
-
 	if err := middleware.InitSecurityProxy(); err != nil {
 		common.SysError("InitSecurityProxy failed: " + err.Error())
 	} else {

@@ -82,7 +82,8 @@ func GetHooks() RelayHooks {
 
 // OnRequestParsed - hook entry point for request parsing
 func OnRequestParsed(c *gin.Context, request dto.Request, relayFormat string) {
-	if globalHooks == nil {
+	h := GetHooks()
+	if h == nil {
 		return
 	}
 
@@ -92,7 +93,7 @@ func OnRequestParsed(c *gin.Context, request dto.Request, relayFormat string) {
 		RelayFormat: relayFormat,
 	}
 
-	result := globalHooks.OnRequestParsed(ctx)
+	result := h.OnRequestParsed(ctx)
 	if result != nil && len(result.LogMessages) > 0 {
 		for _, msg := range result.LogMessages {
 			logger.LogInfo(c.Request.Context(), msg)
@@ -102,7 +103,8 @@ func OnRequestParsed(c *gin.Context, request dto.Request, relayFormat string) {
 
 // OnRelaySuccess - hook entry point for successful relay
 func OnRelaySuccess(c *gin.Context, request dto.Request) {
-	if globalHooks == nil {
+	h := GetHooks()
+	if h == nil {
 		return
 	}
 
@@ -111,7 +113,7 @@ func OnRelaySuccess(c *gin.Context, request dto.Request) {
 		Request:    request,
 	}
 
-	result := globalHooks.OnRelaySuccess(ctx)
+	result := h.OnRelaySuccess(ctx)
 	if result != nil {
 		for k, v := range result.Headers {
 			c.Writer.Header().Set(k, v)
@@ -180,7 +182,3 @@ func GetContextValue(c *gin.Context, key string) (any, bool) {
 	return c.Get(key)
 }
 
-func init() {
-	// Auto-initialize hooks
-	InitHooks()
-}

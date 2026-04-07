@@ -8,7 +8,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	ttmodel "github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/service"
 	ttservice "github.com/QuantumNous/new-api/tt/service"
 
 	"github.com/gin-gonic/gin"
@@ -198,7 +197,7 @@ func VerifyModel(c *gin.Context) {
 	}
 
 	// 发送测试请求验证模型
-	result, err := service.VerifyModelAuthenticity(req.Model)
+	result, err := ttservice.VerifyModelAuthenticity(req.Model)
 	if err != nil {
 		c.JSON(http.StatusOK, VerifyResponse{
 			Model:    req.Model,

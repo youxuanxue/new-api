@@ -2,15 +2,5 @@
 // +build tt
 
 // Package controller provides HTTP handlers
-// relay_tt.go - TT-specific relay modifications (only included in TT builds)
+// relay_tt.go - TT build marker (hooks are initialized in main bootstrap)
 package controller
-
-import (
-	"github.com/QuantumNous/new-api/tt/hooks"
-)
-
-// init registers TT hooks
-func init() {
-	// TT hooks are auto-initialized
-	hooks.InitHooks()
-}

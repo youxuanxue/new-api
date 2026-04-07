@@ -1,3 +1,6 @@
+//go:build tt
+// +build tt
+
 // Package middleware 提供TT核心中间件
 // admin_isolation.go - 管理后台隔离中间件，实现路由隔离、敏感操作审计、关键操作二次验证
 package middleware
