@@ -1,5 +1,6 @@
-// Package model 提供TT数据模型
-// cost_report.go - 成本分析报告模型
+//go:build tt
+// +build tt
+
 package model
 
 import (

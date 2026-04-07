@@ -95,6 +95,9 @@ func LogDebug(ctx context.Context, msg string, args ...any) {
 }
 
 func logHelper(ctx context.Context, level string, msg string) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	id := ctx.Value(common.RequestIdKey)
 	if id == nil {
 		id = "SYSTEM"

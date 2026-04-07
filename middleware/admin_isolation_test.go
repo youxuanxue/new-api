@@ -1,4 +1,6 @@
-// Package middleware_test 测试管理后台隔离中间件
+//go:build tt
+// +build tt
+
 package middleware_test
 
 import (

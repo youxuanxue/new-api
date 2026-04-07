@@ -1,5 +1,6 @@
-// Package middleware 提供TT核心中间件
-// security_proxy.go - 安全代理中间件，实现分级日志和不落盘承诺
+//go:build tt
+// +build tt
+
 package middleware
 
 import (

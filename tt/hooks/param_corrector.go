@@ -2,6 +2,7 @@
 package hooks
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -84,7 +85,7 @@ func (pc *TTParamCorrector) CorrectRequest(c *gin.Context, request dto.Request) 
 		result.WasAdjusted = true
 		request.SetModelName(replacement)
 		modelName = replacement
-		logger.LogInfo(c, "[TTParamCorrector] Deprecated model: %s -> %s", result.OriginalModel, replacement)
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf("[TTParamCorrector] Deprecated model: %s -> %s", result.OriginalModel, replacement))
 	}
 
 	// 2. Model alias resolution
@@ -94,7 +95,7 @@ func (pc *TTParamCorrector) CorrectRequest(c *gin.Context, request dto.Request) 
 		result.WasAdjusted = true
 		request.SetModelName(alias)
 		modelName = alias
-		logger.LogInfo(c, "[TTParamCorrector] Alias resolved: %s -> %s", result.OriginalModel, alias)
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf("[TTParamCorrector] Alias resolved: %s -> %s", result.OriginalModel, alias))
 	}
 
 	// 3. max_tokens correction (TT cost control)
@@ -105,7 +106,7 @@ func (pc *TTParamCorrector) CorrectRequest(c *gin.Context, request dto.Request) 
 			result.CorrectedMaxTokens = limit
 			result.WasAdjusted = true
 			pc.setMaxTokens(request, limit)
-			logger.LogInfo(c, "[TTParamCorrector] max_tokens capped: %d -> %d", maxTokens, limit)
+			logger.LogInfo(c.Request.Context(), fmt.Sprintf("[TTParamCorrector] max_tokens capped: %d -> %d", maxTokens, limit))
 		}
 	}
 
@@ -114,7 +115,7 @@ func (pc *TTParamCorrector) CorrectRequest(c *gin.Context, request dto.Request) 
 		result.AddedStream = true
 		result.WasAdjusted = true
 		pc.setStream(request, true)
-		logger.LogInfo(c, "[TTParamCorrector] stream auto-completed for Claude Code")
+		logger.LogInfo(c.Request.Context(), "[TTParamCorrector] stream auto-completed for Claude Code")
 	}
 
 	// Store result in context
@@ -165,7 +166,7 @@ func (pc *TTParamCorrector) getMaxTokens(request dto.Request) uint {
 		}
 	case *dto.ClaudeRequest:
 		if r.MaxTokens != nil {
-			return uint(*r.MaxTokens)
+			return *r.MaxTokens
 		}
 	}
 	return 0
@@ -176,8 +177,8 @@ func (pc *TTParamCorrector) setMaxTokens(request dto.Request, value uint) {
 	case *dto.GeneralOpenAIRequest:
 		r.MaxTokens = common.GetPointer(value)
 	case *dto.ClaudeRequest:
-		intVal := int(value)
-		r.MaxTokens = &intVal
+		v := value
+		r.MaxTokens = &v
 	}
 }
 

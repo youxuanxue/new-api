@@ -1,4 +1,6 @@
-// Package middleware_test 测试安全代理中间件
+//go:build tt
+// +build tt
+
 package middleware_test
 
 import (

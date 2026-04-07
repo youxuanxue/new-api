@@ -1,4 +1,6 @@
-// Package service 提供模型验证服务
+//go:build tt
+// +build tt
+
 package service
 
 import (

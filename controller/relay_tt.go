@@ -7,8 +7,6 @@ package controller
 
 import (
 	"github.com/QuantumNous/new-api/tt/hooks"
-
-	"github.com/gin-gonic/gin"
 )
 
 // init registers TT hooks

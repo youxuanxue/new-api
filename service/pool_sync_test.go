@@ -1,5 +1,6 @@
-// Package service 提供TT业务服务
-// pool_sync_test.go - 账号池同步测试
+//go:build tt
+// +build tt
+
 package service
 
 import (

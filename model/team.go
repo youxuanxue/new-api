@@ -1,4 +1,6 @@
-// Package model 提供TT团队管理数据模型
+//go:build tt
+// +build tt
+
 package model
 
 import (

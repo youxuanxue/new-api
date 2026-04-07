@@ -1,4 +1,6 @@
-// Package model 提供TT数据访问层
+//go:build tt
+// +build tt
+
 package model
 
 import (

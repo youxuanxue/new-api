@@ -1,3 +1,6 @@
+//go:build tt
+// +build tt
+
 package common
 
 import (

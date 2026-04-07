@@ -1,5 +1,6 @@
-// Package service 提供TT业务服务
-// sub2api_client_test.go - Sub2API 客户端测试
+//go:build tt
+// +build tt
+
 package service
 
 import (

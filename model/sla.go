@@ -1,5 +1,6 @@
-// Package model 提供TT数据模型
-// sla.go - SLA 保障模型
+//go:build tt
+// +build tt
+
 package model
 
 import (

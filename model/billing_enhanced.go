@@ -1,5 +1,6 @@
-// Package model 提供TT数据模型
-// billing_enhanced.go - 计费增强模型：注册赠送、邀请裂变、月度套餐
+//go:build tt
+// +build tt
+
 package model
 
 import (

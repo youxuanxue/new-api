@@ -1,3 +1,6 @@
+//go:build tt
+// +build tt
+
 package router
 
 import (
@@ -133,15 +136,6 @@ func SetTTApiRouter(router *gin.Engine) {
 	router.GET("/tt/router/config", middleware.RouteTag("tt"), middleware.TokenAuth(), controller.GetSmartRouterConfig)
 	router.POST("/tt/router/recommend", middleware.RouteTag("tt"), middleware.TokenAuth(), controller.SmartRoute)
 
-	// 语义缓存管理（V2.0功能）
-	cacheRouter := router.Group("/tt/cache")
-	cacheRouter.Use(middleware.RouteTag("tt"))
-	cacheRouter.Use(middleware.TokenAuth())
-	{
-		cacheRouter.GET("/stats", middleware.GetCacheStatsAPI)
-		cacheRouter.POST("/clear", middleware.ClearCacheAPI)
-	}
-
 	// SLA 保障路由（V2.0功能）
 	slaRouter := router.Group("/tt/sla")
 	slaRouter.Use(middleware.RouteTag("tt"))
@@ -164,7 +158,11 @@ func SetTTAdminRouter(router *gin.Engine) {
 	// 管理后台路由组
 	adminRouter := router.Group("/admin")
 	adminRouter.Use(middleware.RouteTag("admin"))
+	if ips := middleware.GetAdminIPWhitelist(); len(ips) > 0 {
+		adminRouter.Use(middleware.IPWhitelist(ips))
+	}
 	adminRouter.Use(middleware.AdminAuth())
+	adminRouter.Use(middleware.AdminAuthBridge())
 	adminRouter.Use(middleware.AdminIsolation())
 	{
 		// 运营看板

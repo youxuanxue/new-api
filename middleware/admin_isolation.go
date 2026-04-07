@@ -105,17 +105,6 @@ var (
 	auditMutex     sync.Mutex
 )
 
-// InitAdminIsolation 初始化管理后台隔离
-func InitAdminIsolation() error {
-	var err error
-	adminAuditFile, err = os.OpenFile("/var/log/tt/admin_audit.log",
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)
-	if err != nil {
-		log.Printf("[WARN] Failed to open admin audit log: %v", err)
-	}
-	return nil
-}
-
 // AdminIsolation 管理后台隔离中间件
 func AdminIsolation() gin.HandlerFunc {
 	return func(c *gin.Context) {

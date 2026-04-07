@@ -1,5 +1,6 @@
-// Package service 提供TT业务服务
-// pool_sync.go - 账号池同步与封号检测
+//go:build tt
+// +build tt
+
 package service
 
 import (

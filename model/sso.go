@@ -1,5 +1,6 @@
-// Package model 提供TT数据模型
-// sso.go - 企业 SSO 模型
+//go:build tt
+// +build tt
+
 package model
 
 import (

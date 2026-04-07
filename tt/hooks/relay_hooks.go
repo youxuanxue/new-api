@@ -5,7 +5,6 @@ package hooks
 import (
 	"fmt"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 
@@ -96,7 +95,7 @@ func OnRequestParsed(c *gin.Context, request dto.Request, relayFormat string) {
 	result := globalHooks.OnRequestParsed(ctx)
 	if result != nil && len(result.LogMessages) > 0 {
 		for _, msg := range result.LogMessages {
-			logger.LogInfo(c, msg)
+			logger.LogInfo(c.Request.Context(), msg)
 		}
 	}
 }

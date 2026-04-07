@@ -20,6 +20,35 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func HealthCheck(c *gin.Context) {
+	checks := gin.H{}
+	healthy := true
+
+	if err := model.PingDB(); err != nil {
+		checks["db"] = "fail"
+		healthy = false
+	} else {
+		checks["db"] = "ok"
+	}
+
+	if common.RedisEnabled {
+		if err := common.PingRedis(); err != nil {
+			checks["redis"] = "fail"
+			healthy = false
+		} else {
+			checks["redis"] = "ok"
+		}
+	} else {
+		checks["redis"] = "disabled"
+	}
+
+	status := http.StatusOK
+	if !healthy {
+		status = http.StatusServiceUnavailable
+	}
+	c.JSON(status, gin.H{"status": checks})
+}
+
 func TestStatus(c *gin.Context) {
 	err := model.PingDB()
 	if err != nil {
@@ -29,7 +58,6 @@ func TestStatus(c *gin.Context) {
 		})
 		return
 	}
-	// 获取HTTP统计信息
 	httpStats := middleware.GetStats()
 	c.JSON(http.StatusOK, gin.H{
 		"success":    true,
