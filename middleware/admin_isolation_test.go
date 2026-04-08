@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/middleware"
 	ttmodel "github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 )
@@ -184,15 +185,15 @@ func TestIPWhitelist(t *testing.T) {
 
 func TestCheckPermission(t *testing.T) {
 	tests := []struct {
-		userRole   ttmodel.AdminRole
-		operation  string
+		userRole    middleware.AdminRole
+		operation   string
 		shouldAllow bool
 	}{
-		{ttmodel.RoleSuperAdmin, "POST /admin/pricing", true},
-		{ttmodel.RoleOperator, "GET /admin/users", true},
-		{ttmodel.RoleOperator, "POST /admin/pricing", false},
-		{ttmodel.RoleViewer, "GET /admin/users", true},
-		{ttmodel.RoleViewer, "PUT /admin/users", false},
+		{middleware.RoleSuperAdmin, "POST /admin/pricing", true},
+		{middleware.RoleOperator, "GET /admin/users", true},
+		{middleware.RoleOperator, "POST /admin/pricing", false},
+		{middleware.RoleViewer, "GET /admin/users", true},
+		{middleware.RoleViewer, "PUT /admin/users", false},
 	}
 
 	for _, tt := range tests {

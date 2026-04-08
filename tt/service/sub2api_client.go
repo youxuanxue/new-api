@@ -66,6 +66,12 @@ func NewSub2APIClient(baseURL, apiKey string) *Sub2APIClient {
 	}
 }
 
+// BaseURL returns the configured Sub2API base URL (trimmed, no trailing slash).
+func (c *Sub2APIClient) BaseURL() string { return c.baseURL }
+
+// APIKey returns the configured API key.
+func (c *Sub2APIClient) APIKey() string { return c.apiKey }
+
 type AccountInfo struct {
 	Email        string    `json:"email"`
 	AccessToken  string    `json:"access_token"`

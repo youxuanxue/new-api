@@ -269,6 +269,7 @@ func InitResources() error {
 		return err
 	}
 
+	model.BootstrapSetupFromEnv()
 	model.CheckSetup()
 
 	// Initialize options, should after model.InitDB()

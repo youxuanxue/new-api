@@ -274,14 +274,14 @@ func extractRequestMeta(c *gin.Context, start time.Time) RequestMeta {
 
 	// 用户ID哈希（脱敏）
 	if userID, exists := c.Get("user_id"); exists {
-		meta.UserID = hashUserID(fmt.Sprintf("%v", userID))
+		meta.UserID = HashUserID(fmt.Sprintf("%v", userID))
 	}
 
 	return meta
 }
 
-// hashUserID 用户ID哈希（脱敏）
-func hashUserID(id string) string {
+// HashUserID 用户ID哈希（脱敏）
+func HashUserID(id string) string {
 	if len(id) < 8 {
 		return "****"
 	}

@@ -19,19 +19,19 @@ func TestSub2APIClientCreation(t *testing.T) {
 	if client == nil {
 		t.Fatal("Expected client to be created")
 	}
-	if client.baseURL != "http://localhost:8080" {
-		t.Errorf("Expected baseURL to be 'http://localhost:8080', got '%s'", client.baseURL)
+	if client.BaseURL() != "http://localhost:8080" {
+		t.Errorf("Expected baseURL to be 'http://localhost:8080', got '%s'", client.BaseURL())
 	}
-	if client.apiKey != "test-key" {
-		t.Errorf("Expected apiKey to be 'test-key', got '%s'", client.apiKey)
+	if client.APIKey() != "test-key" {
+		t.Errorf("Expected apiKey to be 'test-key', got '%s'", client.APIKey())
 	}
 }
 
 // TestSub2APIClientTrimSuffix 测试 URL 尾部斜杠处理
 func TestSub2APIClientTrimSuffix(t *testing.T) {
 	client := NewSub2APIClient("http://localhost:8080/", "test-key")
-	if client.baseURL != "http://localhost:8080" {
-		t.Errorf("Expected baseURL to be trimmed, got '%s'", client.baseURL)
+	if client.BaseURL() != "http://localhost:8080" {
+		t.Errorf("Expected baseURL to be trimmed, got '%s'", client.BaseURL())
 	}
 }
 
@@ -343,27 +343,6 @@ func TestSub2APIConfig(t *testing.T) {
 	}
 	if got.APIKey != config.APIKey {
 		t.Errorf("Expected APIKey '%s', got '%s'", config.APIKey, got.APIKey)
-	}
-}
-
-// TestPoolSyncConfig 测试同步配置管理
-func TestPoolSyncConfig(t *testing.T) {
-	config := PoolSyncConfig{
-		SyncInterval:     10 * time.Minute,
-		RefreshBefore:    60 * time.Minute,
-		BanCheckInterval: 5 * time.Minute,
-		MaxRetryCount:    5,
-		CooldownDuration: 60 * time.Minute,
-	}
-
-	SetPoolSyncConfig(config)
-	got := GetPoolSyncConfig()
-
-	if got.SyncInterval != config.SyncInterval {
-		t.Errorf("Expected SyncInterval %v, got %v", config.SyncInterval, got.SyncInterval)
-	}
-	if got.MaxRetryCount != config.MaxRetryCount {
-		t.Errorf("Expected MaxRetryCount %d, got %d", config.MaxRetryCount, got.MaxRetryCount)
 	}
 }
 

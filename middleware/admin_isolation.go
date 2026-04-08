@@ -178,6 +178,11 @@ func AdminIsolation() gin.HandlerFunc {
 	}
 }
 
+// CheckPermission reports whether role may perform operation (exported for tests).
+func CheckPermission(role AdminRole, operation string) bool {
+	return checkPermission(role, operation)
+}
+
 // checkPermission 检查权限
 func checkPermission(role AdminRole, operation string) bool {
 	requiredRole, exists := operationPermissions[operation]

@@ -64,8 +64,6 @@ func TestSecurityProxy_RequestBodyLimit(t *testing.T) {
 		c.JSON(http.StatusOK, gin.H{"message": "ok"})
 	})
 
-	// 创建一个超过限制的请求体
-	largeBody := make([]byte, 11*1024*1024) // 11MB
 	req := httptest.NewRequest("POST", "/test", nil)
 	req.Body = nil // 由MaxBytesReader处理
 
