@@ -19,20 +19,21 @@ import { API } from '../../../helpers/api';
 
 const { Title, Text, Paragraph } = Typography;
 
-const MetricStat = ({ title, value, suffix = '', prefix = '', icon = null, valueColor = '' }) => {
+const MetricStat = ({ title, value, suffix = '', prefix = '', icon = null, valueStyle = {} }) => {
   const formattedValue = typeof value === 'number' ? value.toLocaleString() : value;
   return (
     <div className="flex items-center justify-between">
       <div>
         <Text type="secondary" size="small">{title}</Text>
-        <Title heading={4} className={`mb-0 ${valueColor}`}>{`${prefix}${formattedValue}${suffix}`}</Title>
+        <Title heading={4} className="mb-0 tt-mono" style={valueStyle}>
+          {`${prefix}${formattedValue}${suffix}`}
+        </Title>
       </div>
       {icon}
     </div>
   );
 };
 
-// 仪表盘概览卡片
 const DashboardOverview = ({ stats }) => {
   const {
     totalUsers = 0,
@@ -53,7 +54,7 @@ const DashboardOverview = ({ stats }) => {
             title="用户总数"
             value={totalUsers}
             suffix={`(${activeUsers} 活跃)`}
-            icon={<IconUserGroup className="text-blue-500" />}
+            icon={<IconUserGroup style={{ color: 'var(--semi-color-primary)' }} />}
           />
         </Card>
       </Col>
@@ -63,7 +64,8 @@ const DashboardOverview = ({ stats }) => {
             title="本月收入"
             value={monthlyRevenue}
             prefix="$"
-            icon={<IconCreditCard className="text-green-500" />}
+            valueStyle={{ color: 'var(--tt-success)' }}
+            icon={<IconCreditCard style={{ color: 'var(--tt-success)' }} />}
           />
         </Card>
       </Col>
@@ -72,7 +74,7 @@ const DashboardOverview = ({ stats }) => {
           <MetricStat
             title="今日请求"
             value={totalRequests}
-            icon={<IconServer className="text-purple-500" />}
+            icon={<IconServer style={{ color: 'var(--semi-color-primary)' }} />}
           />
         </Card>
       </Col>
@@ -82,7 +84,8 @@ const DashboardOverview = ({ stats }) => {
             title="可用率"
             value={avgAvailability}
             suffix="%"
-            icon={<IconCheckCircleStroked className="text-emerald-500" />}
+            valueStyle={{ color: 'var(--tt-success)' }}
+            icon={<IconCheckCircleStroked style={{ color: 'var(--tt-success)' }} />}
           />
         </Card>
       </Col>
@@ -90,7 +93,6 @@ const DashboardOverview = ({ stats }) => {
   );
 };
 
-// 号池状态卡片
 const PoolStatusCard = ({ poolStats, onRefresh }) => {
   const { total = 0, available = 0, cooldown = 0, banned = 0 } = poolStats;
   const utilizationRate = total > 0 ? (available / total) * 100 : 0;
@@ -101,7 +103,7 @@ const PoolStatusCard = ({ poolStats, onRefresh }) => {
       title={
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <IconServer size={18} className="text-blue-500" />
+            <IconServer size={18} style={{ color: 'var(--semi-color-primary)' }} />
             <Text strong>号池状态</Text>
           </div>
           <Button type="tertiary" size="small" icon={<IconRefresh />} onClick={onRefresh} />
@@ -113,31 +115,32 @@ const PoolStatusCard = ({ poolStats, onRefresh }) => {
           <MetricStat title="总数" value={total} />
         </Col>
         <Col span={6}>
-          <MetricStat title="可用" value={available} valueColor="text-green-600" />
+          <MetricStat title="可用" value={available} valueStyle={{ color: 'var(--tt-success)' }} />
         </Col>
         <Col span={6}>
-          <MetricStat title="冷却" value={cooldown} valueColor="text-amber-500" />
+          <MetricStat title="冷却" value={cooldown} valueStyle={{ color: 'var(--tt-warning)' }} />
         </Col>
         <Col span={6}>
-          <MetricStat title="封禁" value={banned} valueColor="text-red-500" />
+          <MetricStat title="封禁" value={banned} valueStyle={{ color: 'var(--tt-danger)' }} />
         </Col>
       </Row>
 
       <div className="mt-4">
         <div className="flex justify-between text-sm mb-1">
           <Text>利用率</Text>
-          <Text>{utilizationRate.toFixed(1)}%</Text>
+          <Text className="tt-mono">{utilizationRate.toFixed(1)}%</Text>
         </div>
         <Progress
           percent={utilizationRate}
-          stroke={utilizationRate > 50 ? '#10b981' : '#ef4444'}
+          stroke={utilizationRate > 50 ? 'var(--tt-success)' : 'var(--tt-danger)'}
           showInfo={false}
         />
       </div>
 
       {utilizationRate < 30 && (
-        <div className="mt-3 p-2 bg-red-50 rounded flex items-center gap-2">
-          <IconAlertTriangle className="text-red-500" />
+        <div className="mt-3 p-2 rounded flex items-center gap-2"
+          style={{ background: 'var(--semi-color-danger-light-default)' }}>
+          <IconAlertTriangle style={{ color: 'var(--tt-danger)' }} />
           <Text type="danger" size="small">号池可用率过低，请及时补充</Text>
         </div>
       )}
@@ -145,7 +148,6 @@ const PoolStatusCard = ({ poolStats, onRefresh }) => {
   );
 };
 
-// 用户管理卡片
 const UserManagementCard = ({ users, onAdjustBalance, onSetStatus, loading }) => {
   const columns = [
     {
@@ -163,7 +165,9 @@ const UserManagementCard = ({ users, onAdjustBalance, onSetStatus, loading }) =>
       dataIndex: 'balance',
       key: 'balance',
       render: (balance) => (
-        <Text strong className="text-green-600">${parseFloat(balance || 0).toFixed(2)}</Text>
+        <Text strong className="tt-mono" style={{ color: 'var(--tt-success)' }}>
+          ${parseFloat(balance || 0).toFixed(2)}
+        </Text>
       )
     },
     {
@@ -202,7 +206,7 @@ const UserManagementCard = ({ users, onAdjustBalance, onSetStatus, loading }) =>
     <Card className="tt-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <IconUserGroup size={18} className="text-blue-500" />
+          <IconUserGroup size={18} style={{ color: 'var(--semi-color-primary)' }} />
           <Text strong>用户管理</Text>
         </div>
       </div>
@@ -219,7 +223,6 @@ const UserManagementCard = ({ users, onAdjustBalance, onSetStatus, loading }) =>
   );
 };
 
-// 渠道管理卡片
 const ChannelManagementCard = ({ channels, onTest, loading }) => {
   const columns = [
     {
@@ -246,7 +249,7 @@ const ChannelManagementCard = ({ channels, onTest, loading }) => {
       title: '响应时间',
       dataIndex: 'response_time',
       key: 'response_time',
-      render: (time) => time ? `${time}ms` : '-'
+      render: (time) => <span className="tt-mono">{time ? `${time}ms` : '-'}</span>
     },
     {
       title: '成功率',
@@ -256,7 +259,7 @@ const ChannelManagementCard = ({ channels, onTest, loading }) => {
         <Progress
           percent={rate || 0}
           size="small"
-          stroke={rate > 95 ? '#10b981' : rate > 80 ? '#f59e0b' : '#ef4444'}
+          stroke={rate > 95 ? 'var(--tt-success)' : rate > 80 ? 'var(--tt-warning)' : 'var(--tt-danger)'}
           showInfo={false}
           style={{ width: 60 }}
         />
@@ -277,7 +280,7 @@ const ChannelManagementCard = ({ channels, onTest, loading }) => {
     <Card className="tt-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <IconServer size={18} className="text-green-500" />
+          <IconServer size={18} style={{ color: 'var(--tt-success)' }} />
           <Text strong>渠道管理</Text>
         </div>
         <Button type="primary" size="small" icon={<IconPlus />}>
@@ -297,7 +300,6 @@ const ChannelManagementCard = ({ channels, onTest, loading }) => {
   );
 };
 
-// 审计日志卡片
 const AuditLogCard = ({ logs, loading }) => {
   const columns = [
     {
@@ -330,14 +332,15 @@ const AuditLogCard = ({ logs, loading }) => {
       title: 'IP',
       dataIndex: 'ip',
       key: 'ip',
-      width: 120
+      width: 120,
+      render: (ip) => <span className="tt-mono">{ip}</span>
     }
   ];
 
   return (
     <Card className="tt-card">
       <div className="flex items-center gap-2 mb-4">
-        <IconBell size={18} className="text-orange-500" />
+        <IconBell size={18} style={{ color: 'var(--tt-warning)' }} />
         <Text strong>审计日志</Text>
       </div>
 
@@ -353,7 +356,6 @@ const AuditLogCard = ({ logs, loading }) => {
   );
 };
 
-// 主组件
 const AdminConsole = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -365,12 +367,10 @@ const AdminConsole = () => {
   const [channels, setChannels] = useState([]);
   const [logs, setLogs] = useState([]);
 
-  // 调整余额弹窗
   const [adjustBalanceModalVisible, setAdjustBalanceModalVisible] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [adjustAmount, setAdjustAmount] = useState(0);
 
-  // 设置状态弹窗
   const [setStatusModalVisible, setSetStatusModalVisible] = useState(false);
   const [newStatus, setNewStatus] = useState('active');
 
@@ -505,7 +505,6 @@ const AdminConsole = () => {
         </TabPane>
       </Tabs>
 
-      {/* 调整余额弹窗 */}
       <Modal
         title="调整用户余额"
         visible={adjustBalanceModalVisible}
@@ -523,7 +522,6 @@ const AdminConsole = () => {
         </Form>
       </Modal>
 
-      {/* 设置状态弹窗 */}
       <Modal
         title="设置用户状态"
         visible={setStatusModalVisible}

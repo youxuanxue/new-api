@@ -81,7 +81,7 @@ const TeamListCard = ({ teams, onCreate, onSelect, loading }) => {
       key: 'balance',
       width: 120,
       render: (balance) => (
-        <Text strong className="text-green-600">
+        <Text strong className="tt-mono" style={{ color: 'var(--tt-success)' }}>
           ${parseFloat(balance || 0).toFixed(2)}
         </Text>
       )
@@ -117,7 +117,7 @@ const TeamListCard = ({ teams, onCreate, onSelect, loading }) => {
     <Card className="tt-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <IconUserGroup size={20} className="text-indigo-500" />
+          <IconUserGroup size={20} style={{ color: 'var(--semi-color-primary)' }} />
           <Text strong>我的团队</Text>
         </div>
         <Button
@@ -299,7 +299,7 @@ const TeamDetailCard = ({ team, members, apiKeys, onAddMember, onRemoveMember, o
               <Text type="secondary">{team?.description || '暂无描述'}</Text>
             </div>
           </div>
-          <Text strong className="text-green-600 text-xl">
+          <Text strong className="tt-balance-amount" style={{ color: 'var(--tt-success)', fontSize: '1.25rem' }}>
             ${parseFloat(team?.balance || 0).toFixed(2)}
           </Text>
         </div>
@@ -320,7 +320,7 @@ const TeamDetailCard = ({ team, members, apiKeys, onAddMember, onRemoveMember, o
       <Card className="tt-card">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <IconUserGroup size={18} className="text-blue-500" />
+            <IconUserGroup size={18} style={{ color: 'var(--semi-color-primary)' }} />
             <Text strong>成员管理</Text>
           </div>
           <Button
@@ -345,7 +345,7 @@ const TeamDetailCard = ({ team, members, apiKeys, onAddMember, onRemoveMember, o
       <Card className="tt-card">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <IconKey size={18} className="text-orange-500" />
+            <IconKey size={18} style={{ color: 'var(--tt-warning)' }} />
             <Text strong>团队 API Keys</Text>
           </div>
           <Button

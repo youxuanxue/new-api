@@ -25,8 +25,8 @@ body.sidebar-collapsed {
 }
 
 body {
-  font-family: Lato, 'Helvetica Neue', Arial, Helvetica, 'Microsoft YaHei',
-    sans-serif;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Noto Sans SC', 'Helvetica Neue', Arial, sans-serif;
   color: var(--semi-color-text-0);
   background-color: var(--semi-color-bg-0);
 }
@@ -49,8 +49,8 @@ body {
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco,
+    Consolas, 'Courier New', monospace;
 }
 
 /* ==================== 布局相关样式 ==================== */
@@ -149,19 +149,19 @@ code {
 
 /* 侧边栏导航项样式 */
 .sidebar-nav-item {
-  border-radius: 6px;
+  border-radius: 10px;
   margin: 3px 8px;
   transition: all 0.15s ease;
   padding: 8px 12px;
 }
 
 .sidebar-nav-item:hover {
-  background-color: rgba(var(--semi-blue-0), 0.08);
+  background-color: var(--semi-color-primary-light-hover);
   color: var(--semi-color-primary);
 }
 
 .sidebar-nav-item-selected {
-  background-color: rgba(var(--semi-blue-0), 0.12);
+  background-color: var(--semi-color-primary-light-active);
   color: var(--semi-color-primary);
   font-weight: 500;
 }
@@ -758,8 +758,7 @@ html.dark .sbg-variant-green {
 }
 
 .blur-ball-indigo {
-  background: #6366f1;
-  /* indigo-500 */
+  background: #4F46E5;
   top: 40px;
   left: 50%;
   transform: translateX(-50%);
@@ -767,20 +766,18 @@ html.dark .sbg-variant-green {
 }
 
 .blur-ball-teal {
-  background: #14b8a6;
-  /* teal-400 */
+  background: #059669;
   top: 200px;
   left: 30%;
   opacity: 0.4;
 }
 
-/* 浅色主题下让模糊球更柔和 */
 html:not(.dark) .blur-ball-indigo {
-  opacity: 0.25;
+  opacity: 0.22;
 }
 
 html:not(.dark) .blur-ball-teal {
-  opacity: 0.2;
+  opacity: 0.18;
 }
 
 /* ==================== 卡片马卡龙模糊球（类封装） ==================== */
@@ -788,16 +785,11 @@ html:not(.dark) .blur-ball-teal {
 .with-pastel-balls {
   position: relative;
   overflow: hidden;
-  /* 默认变量（明亮模式） */
-  --pb1: #ffd1dc;
-  /* 粉 */
-  --pb2: #e5d4ff;
-  /* 薰衣草 */
-  --pb3: #d1fff6;
-  /* 薄荷 */
-  --pb4: #ffe5d9;
-  /* 桃 */
-  --pb-opacity: 0.55;
+  --pb1: #E0E7FF;
+  --pb2: #DDD6FE;
+  --pb3: #D1FAE5;
+  --pb4: #E0E7FF;
+  --pb-opacity: 0.5;
   --pb-blur: 60px;
 }
 
@@ -820,22 +812,15 @@ html:not(.dark) .blur-ball-teal {
   transform: translateZ(0);
 }
 
-/* 暗黑模式下更柔和的色彩和透明度 */
 html.dark .with-pastel-balls {
-  /* 使用与明亮模式一致的“刚才那组”马卡龙色，但整体更柔和 */
-  --pb1: #ffd1dc;
-  /* 粉 */
-  --pb2: #e5d4ff;
-  /* 薰衣草 */
-  --pb3: #d1fff6;
-  /* 薄荷 */
-  --pb4: #ffe5d9;
-  /* 桃 */
-  --pb-opacity: 0.36;
+  --pb1: #312E81;
+  --pb2: #4C1D95;
+  --pb3: #064E3B;
+  --pb4: #312E81;
+  --pb-opacity: 0.4;
   --pb-blur: 65px;
 }
 
-/* 暗黑模式下用更柔和的混合模式避免突兀的高亮 */
 html.dark .with-pastel-balls::before {
   mix-blend-mode: screen;
 }

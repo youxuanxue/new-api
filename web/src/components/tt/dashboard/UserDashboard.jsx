@@ -10,7 +10,6 @@ import { API } from '../../../helpers/api';
 
 const { Title, Text, Paragraph } = Typography;
 
-// 余额卡片
 const BalanceCard = ({ balance, trialBalance, trialUsed, onRecharge }) => {
   const totalBalance = parseFloat(balance || 0) + parseFloat(trialBalance || 0);
 
@@ -18,7 +17,7 @@ const BalanceCard = ({ balance, trialBalance, trialUsed, onRecharge }) => {
     <Card className="tt-card tt-balance-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <IconCreditCard size={20} className="text-blue-500" />
+          <IconCreditCard size={20} style={{ color: 'var(--tt-balance-text)' }} />
           <Text strong>账户余额</Text>
         </div>
         <Button type="tertiary" size="small" onClick={onRecharge}>
@@ -26,32 +25,31 @@ const BalanceCard = ({ balance, trialBalance, trialUsed, onRecharge }) => {
         </Button>
       </div>
 
-      <Title heading={2} className="text-green-600 mb-2">
+      <Title heading={2} className="tt-balance-amount" style={{ color: 'var(--tt-balance-text)' }}>
         ${totalBalance.toFixed(2)}
       </Title>
 
-      <div className="space-y-1 text-sm text-gray-500">
+      <div className="space-y-1 text-sm" style={{ color: 'var(--semi-color-text-2)' }}>
         <div className="flex justify-between">
           <Text>现金余额</Text>
-          <Text strong>${parseFloat(balance || 0).toFixed(2)}</Text>
+          <Text strong className="tt-mono">${parseFloat(balance || 0).toFixed(2)}</Text>
         </div>
         <div className="flex justify-between">
           <Text>赠送余额</Text>
-          <Text strong>${parseFloat(trialBalance || 0).toFixed(2)}</Text>
+          <Text strong className="tt-mono">${parseFloat(trialBalance || 0).toFixed(2)}</Text>
         </div>
       </div>
     </Card>
   );
 };
 
-// 用量统计卡片
 const UsageCard = ({ usage }) => {
   const { inputTokens = 0, outputTokens = 0, totalCost = 0 } = usage;
 
   return (
     <Card className="tt-card tt-usage-card">
       <div className="flex items-center gap-2 mb-4">
-        <IconPulse size={20} className="text-purple-500" />
+        <IconPulse size={20} style={{ color: 'var(--tt-usage-text)' }} />
         <Text strong>今日用量</Text>
       </div>
 
@@ -59,7 +57,7 @@ const UsageCard = ({ usage }) => {
         <Col span={8}>
           <div className="text-center">
             <Text type="secondary" size="small">输入 Token</Text>
-            <Title heading={4} className="text-blue-600 mb-0">
+            <Title heading={4} className="tt-mono mb-0" style={{ color: 'var(--semi-color-primary)' }}>
               {(inputTokens / 1000).toFixed(1)}K
             </Title>
           </div>
@@ -67,7 +65,7 @@ const UsageCard = ({ usage }) => {
         <Col span={8}>
           <div className="text-center">
             <Text type="secondary" size="small">输出 Token</Text>
-            <Title heading={4} className="text-purple-600 mb-0">
+            <Title heading={4} className="tt-mono mb-0" style={{ color: 'var(--semi-color-primary)' }}>
               {(outputTokens / 1000).toFixed(1)}K
             </Title>
           </div>
@@ -75,7 +73,7 @@ const UsageCard = ({ usage }) => {
         <Col span={8}>
           <div className="text-center">
             <Text type="secondary" size="small">费用</Text>
-            <Title heading={4} className="text-green-600 mb-0">
+            <Title heading={4} className="tt-mono mb-0" style={{ color: 'var(--tt-success)' }}>
               ${totalCost.toFixed(4)}
             </Title>
           </div>
@@ -85,7 +83,6 @@ const UsageCard = ({ usage }) => {
   );
 };
 
-// API Key 管理卡片
 const APIKeyCard = ({ keys, onCreate, onRevoke, loading }) => {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [form, setForm] = useState({ name: '', limit: 0 });
@@ -108,7 +105,7 @@ const APIKeyCard = ({ keys, onCreate, onRevoke, loading }) => {
       key: 'key',
       render: (key) => (
         <div className="flex items-center gap-2">
-          <Text code>{key.substring(0, 12)}...</Text>
+          <Text code className="tt-mono">{key.substring(0, 12)}...</Text>
           <Button
             size="small"
             icon={<IconCopy />}
@@ -134,7 +131,7 @@ const APIKeyCard = ({ keys, onCreate, onRevoke, loading }) => {
       title: '已用额度',
       dataIndex: 'usedQuota',
       key: 'usedQuota',
-      render: (used) => `$${parseFloat(used || 0).toFixed(4)}`
+      render: (used) => <span className="tt-mono">${parseFloat(used || 0).toFixed(4)}</span>
     },
     {
       title: '操作',
@@ -156,7 +153,7 @@ const APIKeyCard = ({ keys, onCreate, onRevoke, loading }) => {
     <Card className="tt-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <IconKey size={20} className="text-orange-500" />
+          <IconKey size={20} style={{ color: 'var(--tt-warning)' }} />
           <Text strong>API Keys</Text>
         </div>
         <Button
@@ -210,7 +207,6 @@ const APIKeyCard = ({ keys, onCreate, onRevoke, loading }) => {
   );
 };
 
-// 预算状态卡片
 const BudgetCard = ({ budget }) => {
   const { dailyUsed = 0, dailyLimit = 0, monthlyUsed = 0, monthlyLimit = 0, shouldAlert = false } = budget;
 
@@ -218,7 +214,7 @@ const BudgetCard = ({ budget }) => {
     <Card className="tt-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <IconAlertTriangle size={20} className={shouldAlert ? 'text-red-500' : 'text-yellow-500'} />
+          <IconAlertTriangle size={20} style={{ color: shouldAlert ? 'var(--tt-danger)' : 'var(--tt-warning)' }} />
           <Text strong>预算状态</Text>
         </div>
         {shouldAlert && (
@@ -230,12 +226,12 @@ const BudgetCard = ({ budget }) => {
         <div>
           <div className="flex justify-between text-sm mb-1">
             <Text>今日消费</Text>
-            <Text>${dailyUsed.toFixed(2)} / ${dailyLimit || '∞'}</Text>
+            <Text className="tt-mono">${dailyUsed.toFixed(2)} / ${dailyLimit || '∞'}</Text>
           </div>
           {dailyLimit > 0 && (
             <Progress
               percent={(dailyUsed / dailyLimit) * 100}
-              stroke={dailyUsed / dailyLimit > 0.8 ? '#ef4444' : '#10b981'}
+              stroke={dailyUsed / dailyLimit > 0.8 ? 'var(--tt-danger)' : 'var(--tt-success)'}
               showInfo={false}
             />
           )}
@@ -244,12 +240,12 @@ const BudgetCard = ({ budget }) => {
         <div>
           <div className="flex justify-between text-sm mb-1">
             <Text>本月消费</Text>
-            <Text>${monthlyUsed.toFixed(2)} / ${monthlyLimit || '∞'}</Text>
+            <Text className="tt-mono">${monthlyUsed.toFixed(2)} / ${monthlyLimit || '∞'}</Text>
           </div>
           {monthlyLimit > 0 && (
             <Progress
               percent={(monthlyUsed / monthlyLimit) * 100}
-              stroke={monthlyUsed / monthlyLimit > 0.8 ? '#ef4444' : '#3b82f6'}
+              stroke={monthlyUsed / monthlyLimit > 0.8 ? 'var(--tt-danger)' : 'var(--semi-color-primary)'}
               showInfo={false}
             />
           )}
@@ -259,13 +255,12 @@ const BudgetCard = ({ budget }) => {
   );
 };
 
-// 团队卡片
 const TeamCard = ({ teams, onViewTeam }) => {
   return (
     <Card className="tt-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <IconUserGroup size={20} className="text-indigo-500" />
+          <IconUserGroup size={20} style={{ color: 'var(--semi-color-primary)' }} />
           <Text strong>我的团队</Text>
         </div>
         <Button type="tertiary" size="small" onClick={() => onViewTeam(null)}>
@@ -280,7 +275,8 @@ const TeamCard = ({ teams, onViewTeam }) => {
           {teams.slice(0, 3).map((team) => (
             <div
               key={team.id}
-              className="flex items-center justify-between p-2 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
+              className="flex items-center justify-between p-2 rounded cursor-pointer"
+              style={{ background: 'var(--semi-color-fill-0)' }}
               onClick={() => onViewTeam(team.id)}
             >
               <div>
@@ -289,7 +285,7 @@ const TeamCard = ({ teams, onViewTeam }) => {
                   {team.member_count} 成员
                 </Text>
               </div>
-              <Tag color="green">${parseFloat(team.balance || 0).toFixed(2)}</Tag>
+              <Tag color="green" className="tt-mono">${parseFloat(team.balance || 0).toFixed(2)}</Tag>
             </div>
           ))}
         </div>
@@ -298,7 +294,6 @@ const TeamCard = ({ teams, onViewTeam }) => {
   );
 };
 
-// 主组件
 const UserDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -385,7 +380,6 @@ const UserDashboard = () => {
       </div>
 
       <Row gutter={[16, 16]}>
-        {/* 第一行：余额和用量 */}
         <Col span={12}>
           <BalanceCard
             balance={balance.balance}
@@ -398,7 +392,6 @@ const UserDashboard = () => {
           <UsageCard usage={usage} />
         </Col>
 
-        {/* 第二行：API Keys */}
         <Col span={24}>
           <APIKeyCard
             keys={apiKeys}
@@ -408,7 +401,6 @@ const UserDashboard = () => {
           />
         </Col>
 
-        {/* 第三行：预算和团队 */}
         <Col span={12}>
           <BudgetCard budget={budget} />
         </Col>

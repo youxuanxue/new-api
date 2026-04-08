@@ -1,0 +1,336 @@
+/*
+ * TokenKey (TT) Brand Theme
+ *
+ * Overrides Semi Design CSS variables to apply the TT brand identity.
+ * See docs/TT_UI_SPEC.md for the full specification.
+ *
+ * Primary: Indigo — trust, technology, depth
+ * Accent:  Emerald — security, verified, healthy
+ *
+ * IMPORTANT: Must target `body` (not `:root`) because Semi Design
+ * declares variables on `body` inside `@layer semi`. A direct
+ * unlayered declaration on `body` that appears later in source
+ * order beats Semi's both layered and unlayered declarations.
+ */
+
+/* ═══════════════════════════════════════════════════════════════
+   LIGHT MODE
+   ═══════════════════════════════════════════════════════════════ */
+body {
+  /* --- Primary (Indigo) --- */
+  --semi-color-primary: #4F46E5;
+  --semi-color-primary-hover: #4338CA;
+  --semi-color-primary-active: #3730A3;
+  --semi-color-primary-disabled: rgba(79, 70, 229, 0.5);
+  --semi-color-primary-light-default: rgba(79, 70, 229, 0.08);
+  --semi-color-primary-light-hover: rgba(79, 70, 229, 0.12);
+  --semi-color-primary-light-active: rgba(79, 70, 229, 0.18);
+
+  /* --- Focus & Link --- */
+  --semi-color-focus-border: rgba(79, 70, 229, 0.5);
+  --semi-color-link: #4F46E5;
+  --semi-color-link-hover: #4338CA;
+  --semi-color-link-active: #3730A3;
+  --semi-color-link-visited: #6D28D9;
+
+  /* --- Background (Slate-tinted, not pure white) --- */
+  --semi-color-bg-0: #F8FAFC;
+  --semi-color-bg-1: #FFFFFF;
+  --semi-color-bg-2: #FFFFFF;
+  --semi-color-bg-3: #F1F5F9;
+  --semi-color-bg-4: #E2E8F0;
+  --semi-color-nav-bg: #FFFFFF;
+
+  /* --- Border --- */
+  --semi-color-border: #E2E8F0;
+
+  /* --- Shadow (slightly tinted) --- */
+  --semi-shadow-elevated: 0 0 1px rgba(15, 23, 42, 0.08), 0 4px 14px rgba(15, 23, 42, 0.08);
+
+  /* --- TT brand tokens --- */
+  --tt-primary: #4F46E5;
+  --tt-primary-hover: #4338CA;
+  --tt-primary-active: #3730A3;
+  --tt-primary-rgb: 79, 70, 229;
+  --tt-primary-light: rgba(79, 70, 229, 0.08);
+  --tt-success: #059669;
+  --tt-success-rgb: 5, 150, 105;
+  --tt-warning: #D97706;
+  --tt-danger: #DC2626;
+
+  --tt-gradient-brand: linear-gradient(135deg, #4F46E5, #7C3AED);
+  --tt-gradient-balance: linear-gradient(135deg, #EEF2FF, #E0E7FF);
+  --tt-gradient-usage: linear-gradient(135deg, #F0FDF4, #DCFCE7);
+  --tt-gradient-hero: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #6D28D9 100%);
+
+  --tt-balance-border: #C7D2FE;
+  --tt-balance-text: #3730A3;
+  --tt-usage-border: #86EFAC;
+  --tt-usage-text: #059669;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DARK MODE
+   ═══════════════════════════════════════════════════════════════ */
+body[theme-mode='dark'] {
+  /* --- Primary (Indigo, lighter for dark backgrounds) --- */
+  --semi-color-primary: #818CF8;
+  --semi-color-primary-hover: #6366F1;
+  --semi-color-primary-active: #4F46E5;
+  --semi-color-primary-disabled: rgba(129, 140, 248, 0.5);
+  --semi-color-primary-light-default: rgba(129, 140, 248, 0.12);
+  --semi-color-primary-light-hover: rgba(129, 140, 248, 0.18);
+  --semi-color-primary-light-active: rgba(129, 140, 248, 0.24);
+
+  /* --- Focus & Link --- */
+  --semi-color-focus-border: rgba(129, 140, 248, 0.5);
+  --semi-color-link: #818CF8;
+  --semi-color-link-hover: #A5B4FC;
+  --semi-color-link-active: #6366F1;
+  --semi-color-link-visited: #A78BFA;
+
+  /* --- Background (Slate blue-tinted, not neutral gray) --- */
+  --semi-color-bg-0: #0F172A;
+  --semi-color-bg-1: #1E293B;
+  --semi-color-bg-2: #334155;
+  --semi-color-bg-3: #475569;
+  --semi-color-bg-4: #64748B;
+  --semi-color-nav-bg: #1E293B;
+
+  /* --- Border --- */
+  --semi-color-border: rgba(148, 163, 184, 0.12);
+
+  /* --- Shadow --- */
+  --semi-shadow-elevated: inset 0 0 0 1px rgba(148, 163, 184, 0.08), 0 4px 14px rgba(0, 0, 0, 0.3);
+
+  /* --- TT brand tokens --- */
+  --tt-primary: #818CF8;
+  --tt-primary-hover: #6366F1;
+  --tt-primary-active: #4F46E5;
+  --tt-primary-rgb: 129, 140, 248;
+  --tt-primary-light: rgba(129, 140, 248, 0.12);
+  --tt-success: #34D399;
+  --tt-success-rgb: 52, 211, 153;
+  --tt-warning: #FBBF24;
+  --tt-danger: #F87171;
+
+  --tt-gradient-brand: linear-gradient(135deg, #6366F1, #8B5CF6);
+  --tt-gradient-balance: linear-gradient(135deg, #312E81, #3730A3);
+  --tt-gradient-usage: linear-gradient(135deg, #064E3B, #065F46);
+  --tt-gradient-hero: linear-gradient(135deg, #4338CA 0%, #6D28D9 50%, #5B21B6 100%);
+
+  --tt-balance-border: #4338CA;
+  --tt-balance-text: #A5B4FC;
+  --tt-usage-border: #047857;
+  --tt-usage-text: #34D399;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   COMPONENT OVERRIDES
+   ═══════════════════════════════════════════════════════════════ */
+
+/* --- Header: Slate-tinted frosted glass ---
+ * The inner <header> already has Tailwind backdrop-blur-lg.
+ * We override bg-white/75 → Slate-50/75 and dark:bg-zinc-900/75 → Slate-900/75
+ * to match the brand page background tint.
+ */
+.semi-layout-header > header {
+  background-color: rgba(248, 250, 252, 0.75) !important;
+  border-bottom: 1px solid var(--semi-color-border);
+}
+
+body[theme-mode='dark'] .semi-layout-header > header {
+  background-color: rgba(15, 23, 42, 0.75) !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
+}
+
+/* --- Cards: 12px radius, elevated surface, hover lift --- */
+.semi-card {
+  border-radius: 12px !important;
+  border: 1px solid var(--semi-color-border);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.semi-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+body[theme-mode='dark'] .semi-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+/* --- Modals / Dialogs: 16px radius --- */
+.semi-modal-content {
+  border-radius: 16px !important;
+  overflow: hidden;
+}
+
+.semi-sidesheet-inner {
+  border-radius: 16px 0 0 16px !important;
+}
+
+/* --- Primary Button: gradient + shadow --- */
+.semi-button-primary {
+  background: linear-gradient(135deg, #4F46E5, #6366F1) !important;
+  border: none !important;
+  color: #FFFFFF !important;
+  font-weight: 600;
+  text-shadow: none;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.semi-button-primary:hover {
+  background: linear-gradient(135deg, #4338CA, #4F46E5) !important;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+}
+
+.semi-button-primary:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 4px rgba(79, 70, 229, 0.25);
+}
+
+body[theme-mode='dark'] .semi-button-primary {
+  background: linear-gradient(135deg, #6366F1, #818CF8) !important;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+body[theme-mode='dark'] .semi-button-primary:hover {
+  background: linear-gradient(135deg, #4F46E5, #6366F1) !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+}
+
+/* Ensure light-style and tertiary buttons remain readable in dark mode */
+.semi-button-tertiary {
+  color: var(--semi-color-text-0) !important;
+}
+
+body[theme-mode='dark'] .semi-button-tertiary {
+  color: #E2E8F0 !important;
+}
+
+.semi-button-light:not(.semi-button-disabled) {
+  color: var(--semi-color-primary) !important;
+}
+
+body[theme-mode='dark'] .semi-button-light:not(.semi-button-disabled) {
+  color: #C7D2FE !important;
+}
+
+/* Modal footer actions: boost contrast for copy/confirm actions */
+.semi-modal-footer .semi-button-primary {
+  color: #FFFFFF !important;
+  background: linear-gradient(135deg, #4F46E5, #6366F1) !important;
+}
+
+body[theme-mode='dark'] .semi-modal-footer .semi-button-primary {
+  color: #FFFFFF !important;
+  background: linear-gradient(135deg, #6366F1, #818CF8) !important;
+}
+
+/* --- Focus ring: indigo glow --- */
+.semi-input-wrapper:focus-within,
+.semi-select:focus-within,
+.semi-tagInput:focus-within,
+.semi-datepicker-range-input:focus-within {
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12) !important;
+  border-color: var(--semi-color-primary) !important;
+}
+
+body[theme-mode='dark'] .semi-input-wrapper:focus-within,
+body[theme-mode='dark'] .semi-select:focus-within,
+body[theme-mode='dark'] .semi-tagInput:focus-within,
+body[theme-mode='dark'] .semi-datepicker-range-input:focus-within {
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15) !important;
+}
+
+/* --- Progress bar: gradient fill --- */
+.semi-progress-line-inner {
+  background: linear-gradient(90deg, var(--semi-color-primary), #818CF8) !important;
+  border-radius: 4px;
+}
+
+body[theme-mode='dark'] .semi-progress-line-inner {
+  background: linear-gradient(90deg, #6366F1, #A5B4FC) !important;
+}
+
+/* --- Table header: subtle background --- */
+.semi-table-thead > tr > th {
+  background: var(--semi-color-bg-0) !important;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  font-weight: 500;
+  color: var(--semi-color-text-2);
+}
+
+/* --- Toast / Notification: rounded --- */
+.semi-toast-wrapper .semi-toast {
+  border-radius: 12px !important;
+}
+
+.semi-notification-notice {
+  border-radius: 12px !important;
+}
+
+/* --- Dropdown / Popover: 12px radius --- */
+.semi-popover-wrapper-content,
+.semi-dropdown-content {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+/* --- Tooltip: rounded --- */
+.semi-tooltip-wrapper-content {
+  border-radius: 8px !important;
+}
+
+/* --- Tag: 6px radius --- */
+.semi-tag {
+  border-radius: 6px !important;
+}
+
+/* --- Numbers: monospace everywhere --- */
+.semi-statistic-value {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, monospace !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Pagination: current page uses primary gradient --- */
+.semi-page-item-active {
+  background: linear-gradient(135deg, #4F46E5, #6366F1) !important;
+  border: none !important;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2);
+}
+
+body[theme-mode='dark'] .semi-page-item-active {
+  background: linear-gradient(135deg, #6366F1, #818CF8) !important;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
+}
+
+/* --- Banner: rounded --- */
+.semi-banner {
+  border-radius: 12px !important;
+}
+
+/* --- Avatar: ring on hover --- */
+.semi-avatar:hover {
+  box-shadow: 0 0 0 2px var(--semi-color-primary-light-active);
+}
+
+/* --- Tabs ink bar: match primary --- */
+.semi-tabs-bar-line .semi-tabs-ink-bar {
+  background: var(--semi-color-primary) !important;
+}
+
+/* --- Global micro-transitions --- */
+.semi-button,
+.semi-input-wrapper,
+.semi-select,
+.semi-tag,
+.semi-card,
+.semi-navigation-item,
+.sidebar-nav-item {
+  transition: all 0.15s ease;
+}
