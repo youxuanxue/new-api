@@ -12,11 +12,16 @@ import (
 const (
 	BillingSourceWallet       = "wallet"
 	BillingSourceSubscription = "subscription"
+	// BillingSourceTeam is used when authenticating with a tk-team- API key (TT builds).
+	BillingSourceTeam = "team"
 )
 
 // PreConsumeBilling 根据用户计费偏好创建 BillingSession 并执行预扣费。
 // 会话存储在 relayInfo.Billing 上，供后续 Settle / Refund 使用。
 func PreConsumeBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
+	if apiErr := checkUserBudgetBeforeBilling(relayInfo); apiErr != nil {
+		return apiErr
+	}
 	session, apiErr := NewBillingSession(c, relayInfo, preConsumedQuota)
 	if apiErr != nil {
 		return apiErr
@@ -58,8 +63,10 @@ func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuo
 			return err
 		}
 
+		notifyBudgetAfterSettleIfApplicable(relayInfo)
+
 		// 发送额度通知（订阅计费使用订阅剩余额度）
-		if actualQuota != 0 {
+		if actualQuota != 0 && relayInfo.TeamId == 0 {
 			if relayInfo.BillingSource == BillingSourceSubscription {
 				checkAndSendSubscriptionQuotaNotify(relayInfo)
 			} else {

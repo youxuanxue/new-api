@@ -222,6 +222,10 @@ func SetTTAdminRouter(router *gin.Engine) {
 		adminRouter.PUT("/webhooks/:id", controller.UpdateWebhook)
 		adminRouter.DELETE("/webhooks/:id", controller.DeleteWebhook)
 		adminRouter.POST("/webhooks/:id/test", controller.TestWebhook)
+
+		// 团队运营
+		adminRouter.POST("/teams/:id/adjust-balance", controller.AdminAdjustTeamBalance)
+		adminRouter.PUT("/teams/:id/monthly-limit", controller.AdminSetTeamMonthlyLimit)
 	}
 }
 

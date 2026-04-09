@@ -59,6 +59,8 @@ var sensitiveOperations = map[string]bool{
 	"POST /admin/webhooks":             true,
 	"PUT /admin/webhooks":              true,
 	"DELETE /admin/webhooks":           true,
+	"POST /admin/teams/adjust-balance": true,
+	"PUT /admin/teams/monthly-limit":   true,
 }
 
 // criticalOperations require a valid X-TOTP-Code header (2FA).
@@ -71,6 +73,8 @@ var criticalOperations = map[string]bool{
 	"DELETE /admin/channels":           true,
 	"DELETE /admin/pool/accounts":      true,
 	"PUT /admin/settings":              true,
+	"POST /admin/teams/adjust-balance": true,
+	"PUT /admin/teams/monthly-limit":   true,
 }
 
 // operationPermissions maps "METHOD /normalized/path" to the minimum
@@ -132,6 +136,10 @@ var operationPermissions = map[string]AdminRole{
 	"PUT /admin/webhooks":     RoleOperator,
 	"DELETE /admin/webhooks":  RoleSuperAdmin,
 	"POST /admin/webhooks/test": RoleOperator,
+
+	// Teams (billing ops)
+	"POST /admin/teams/adjust-balance": RoleSuperAdmin,
+	"PUT /admin/teams/monthly-limit":   RoleSuperAdmin,
 }
 
 // AdminAuditLog 管理员审计日志

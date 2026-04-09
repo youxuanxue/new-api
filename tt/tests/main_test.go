@@ -32,6 +32,8 @@ func TestMain(m *testing.M) {
 
 	testDB.AutoMigrate(
 		&model.User{},
+		&model.SubscriptionPlan{},
+		&model.UserSubscription{},
 		&model.Channel{},
 		&ttmodel.Token{},
 		&ttmodel.UserExtension{},

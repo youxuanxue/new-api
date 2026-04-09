@@ -202,21 +202,65 @@ body[theme-mode='dark'] .semi-button-primary:hover {
   box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
 }
 
+/*
+ * Semi default is type=primary + theme=light (.semi-button-primary.semi-button-light).
+ * A previous global .semi-button-light { color: !important } beat .semi-button-primary on
+ * specificity, yielding pastel fill + lavender text — reads as disabled (TT_UI_SPEC §五 Primary).
+ * Force primary+light to match solid: white label on indigo gradient.
+ */
+.semi-button-primary.semi-button-light:not(.semi-button-disabled),
+.semi-button-primary.semi-button-light:not(.semi-button-disabled) .semi-button-content {
+  color: #ffffff !important;
+}
+
+.semi-button-primary.semi-button-light:not(.semi-button-disabled):hover,
+.semi-button-primary.semi-button-light:not(.semi-button-disabled):hover .semi-button-content {
+  color: #ffffff !important;
+}
+
+.semi-button-primary.semi-button-light:not(.semi-button-disabled):active,
+.semi-button-primary.semi-button-light:not(.semi-button-disabled):active .semi-button-content {
+  color: #ffffff !important;
+}
+
 /* Ensure light-style and tertiary buttons remain readable in dark mode */
 .semi-button-tertiary {
   color: var(--semi-color-text-0) !important;
 }
 
 body[theme-mode='dark'] .semi-button-tertiary {
-  color: #E2E8F0 !important;
+  color: #e2e8f0 !important;
 }
 
-.semi-button-light:not(.semi-button-disabled) {
-  color: var(--semi-color-primary) !important;
+/* Secondary (TT_UI_SPEC §五): indigo tint + clear border — not a washed “disabled” chip */
+.semi-button-primary.semi-button-outline:not(.semi-button-disabled) {
+  background: var(--semi-color-primary-light-default) !important;
+  border: 1px solid rgba(var(--tt-primary-rgb), 0.45) !important;
+  color: var(--tt-primary) !important;
+  font-weight: 600;
+  box-shadow: none;
 }
 
-body[theme-mode='dark'] .semi-button-light:not(.semi-button-disabled) {
-  color: #C7D2FE !important;
+.semi-button-primary.semi-button-outline:not(.semi-button-disabled):hover {
+  background: var(--semi-color-primary-light-hover) !important;
+  border-color: var(--semi-color-primary) !important;
+  color: var(--semi-color-primary-hover) !important;
+}
+
+.semi-button-primary.semi-button-outline:not(.semi-button-disabled):active {
+  background: var(--semi-color-primary-light-active) !important;
+}
+
+body[theme-mode='dark'] .semi-button-primary.semi-button-outline:not(.semi-button-disabled) {
+  background: rgba(129, 140, 248, 0.16) !important;
+  border: 1px solid rgba(165, 180, 252, 0.55) !important;
+  color: #eef2ff !important;
+}
+
+body[theme-mode='dark'] .semi-button-primary.semi-button-outline:not(.semi-button-disabled):hover {
+  background: rgba(129, 140, 248, 0.26) !important;
+  border-color: #a5b4fc !important;
+  color: #f8fafc !important;
 }
 
 /* Modal footer actions: boost contrast for copy/confirm actions */

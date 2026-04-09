@@ -344,6 +344,9 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
+	if relayInfo != nil && relayInfo.TeamId > 0 {
+		return nil
+	}
 	if relayInfo.IsPlayground {
 		return nil
 	}

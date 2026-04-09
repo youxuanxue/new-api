@@ -101,6 +101,9 @@ type Plan struct {
 	// 功能开关（TEXT兼容所有数据库）
 	Features string `json:"features" gorm:"type:text"` // JSON格式存储
 
+	// UpstreamSubscriptionPlanId 对应 subscription_plans.id，用于 Stripe/易支付等上游订阅支付
+	UpstreamSubscriptionPlanId int `json:"upstream_subscription_plan_id" gorm:"default:0"`
+
 	// 排序和状态
 	SortOrder int  `json:"sort_order" gorm:"default:0"`
 	IsActive  bool `json:"is_active" gorm:"default:true"`

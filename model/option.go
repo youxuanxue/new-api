@@ -184,6 +184,7 @@ func loadOptionsFromDatabase() {
 			common.SysLog("failed to update option map: " + err.Error())
 		}
 	}
+	ratio_setting.MergeMissingDefaultModelRatios()
 }
 
 func SyncOptions(frequency int) {

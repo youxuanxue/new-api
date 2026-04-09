@@ -268,6 +268,21 @@ var defaultModelRatio = map[string]float64{
 	"deepseek-ai/DeepSeek-R1":                 0.8,
 	"deepseek-ai/DeepSeek-V3-0324":            0.8,
 	"deepseek-ai/DeepSeek-V3.1":               0.8,
+	// Volcengine Ark / 豆包（与 relay/channel/volcengine/constants.go ModelList 对齐；默认可用，运营可在后台覆盖倍率）
+	"Doubao-pro-4k":    1.0,
+	"Doubao-pro-32k":   1.2,
+	"Doubao-pro-128k":  1.5,
+	"Doubao-lite-4k":   0.25,
+	"Doubao-lite-32k":  0.3,
+	"Doubao-lite-128k": 0.35,
+	"Doubao-embedding": 0.05,
+	// 图/视频/思考系：按量预扣的占位倍率；精确按次可在后台配模型价格
+	"doubao-seedream-4-0-250828":      2.5,
+	"seedream-4-0-250828":             2.5,
+	"doubao-seedance-1-0-pro-250528":  5.0,
+	"seedance-1-0-pro-250528":         5.0,
+	"doubao-seed-1-6-thinking-250715": 1.2,
+	"seed-1-6-thinking-250715":        1.2,
 }
 
 var defaultModelPrice = map[string]float64{
@@ -343,6 +358,16 @@ func InitRatioSettings() {
 	imageRatioMap.AddAll(defaultImageRatio)
 	audioRatioMap.AddAll(defaultAudioRatio)
 	audioCompletionRatioMap.AddAll(defaultAudioCompletionRatio)
+}
+
+// MergeMissingDefaultModelRatios 在从数据库加载 ModelRatio 等覆盖内存映射之后调用，
+// 为代码中新增加的默认模型补倍率，避免升级后仍报「倍率未配置」。
+func MergeMissingDefaultModelRatios() {
+	for k, v := range defaultModelRatio {
+		if _, ok := modelRatioMap.Get(k); !ok {
+			modelRatioMap.Set(k, v)
+		}
+	}
 }
 
 func GetModelPriceMap() map[string]float64 {

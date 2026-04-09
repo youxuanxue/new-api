@@ -8,7 +8,6 @@ import (
 
 	"github.com/QuantumNous/new-api/model"
 	ttmodel "github.com/QuantumNous/new-api/model"
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -196,7 +195,7 @@ func TestUS064_CreateTeamAPIKey_RevokedKeyRateLimitIsZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create team api key: %v", err)
 	}
-	if err := ttmodel.RevokeTeamAPIKey(key.Id); err != nil {
+	if err := ttmodel.RevokeTeamAPIKey(team.Id, key.Id); err != nil {
 		t.Fatalf("Failed to revoke team api key: %v", err)
 	}
 
@@ -243,47 +242,6 @@ func TestUS065_ListTeams_EmptyForNonMember(t *testing.T) {
 	if len(teams) != 0 {
 		t.Fatalf("Expected no teams for non-member user, got %d", len(teams))
 	}
-}
-
-func TestUS070_ListPlans(t *testing.T) {
-	plans := []ttmodel.Plan{
-		{Name: "Starter", MonthlyPrice: decimal.NewFromFloat(15), IncludedUSD: decimal.NewFromFloat(18), IsActive: true},
-		{Name: "Developer", MonthlyPrice: decimal.NewFromFloat(59), IncludedUSD: decimal.NewFromFloat(80), IsActive: true},
-		{Name: "Retired070", MonthlyPrice: decimal.NewFromFloat(9), IncludedUSD: decimal.NewFromFloat(5), IsActive: false},
-	}
-	for _, p := range plans {
-		if err := testDB.Create(&p).Error; err != nil {
-			t.Fatalf("seed plan %q: %v", p.Name, err)
-		}
-	}
-	// GORM may omit false bool on Create when column has gorm default:true; force inactive row.
-	if err := testDB.Model(&ttmodel.Plan{}).Where("name = ?", "Retired070").Update("is_active", false).Error; err != nil {
-		t.Fatalf("set Retired070 inactive: %v", err)
-	}
-
-	result, err := ttmodel.GetActivePlans()
-	if err != nil {
-		t.Fatalf("Failed to list plans: %v", err)
-	}
-
-	if len(result) < 2 {
-		t.Fatalf("Expected at least 2 active plans, got %d", len(result))
-	}
-
-	names := make(map[string]struct{}, len(result))
-	for _, p := range result {
-		names[p.Name] = struct{}{}
-	}
-	for _, want := range []string{"Starter", "Developer"} {
-		if _, ok := names[want]; !ok {
-			t.Errorf("missing active plan %q in GetActivePlans result", want)
-		}
-	}
-	if _, bad := names["Retired070"]; bad {
-		t.Error("inactive plan Retired070 must not appear in GetActivePlans")
-	}
-
-	t.Logf("✓ US-070: List plans test passed")
 }
 
 // waitWebhookMinSendCount polls until webhook id reaches at least wantCount (covers async TriggerWebhook).

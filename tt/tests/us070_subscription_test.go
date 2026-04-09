@@ -1,15 +1,130 @@
 package tests
 
 import (
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	ttmodel "github.com/QuantumNous/new-api/model"
+	ttcontroller "github.com/QuantumNous/new-api/tt/controller"
+	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
+
+func TestUS070_ListPlans(t *testing.T) {
+	plans := []ttmodel.Plan{
+		{Name: "Starter", MonthlyPrice: decimal.NewFromFloat(15), IncludedUSD: decimal.NewFromFloat(18), IsActive: true},
+		{Name: "Developer", MonthlyPrice: decimal.NewFromFloat(59), IncludedUSD: decimal.NewFromFloat(80), IsActive: true},
+		{Name: "Retired070", MonthlyPrice: decimal.NewFromFloat(9), IncludedUSD: decimal.NewFromFloat(5), IsActive: false},
+	}
+	for _, p := range plans {
+		if err := testDB.Create(&p).Error; err != nil {
+			t.Fatalf("seed plan %q: %v", p.Name, err)
+		}
+	}
+	if err := testDB.Model(&ttmodel.Plan{}).Where("name = ?", "Retired070").Update("is_active", false).Error; err != nil {
+		t.Fatalf("set Retired070 inactive: %v", err)
+	}
+
+	result, err := ttmodel.GetActivePlans()
+	if err != nil {
+		t.Fatalf("Failed to list plans: %v", err)
+	}
+	if len(result) < 2 {
+		t.Fatalf("Expected at least 2 active plans, got %d", len(result))
+	}
+	names := make(map[string]struct{}, len(result))
+	for _, p := range result {
+		names[p.Name] = struct{}{}
+	}
+	for _, want := range []string{"Starter", "Developer"} {
+		if _, ok := names[want]; !ok {
+			t.Errorf("missing active plan %q in GetActivePlans result", want)
+		}
+	}
+	if _, bad := names["Retired070"]; bad {
+		t.Error("inactive plan Retired070 must not appear in GetActivePlans")
+	}
+	t.Logf("✓ US-070: List plans test passed")
+}
+
+func TestUS070_GetActivePlans_IncludesUpstreamSubscriptionPlanId(t *testing.T) {
+	p := ttmodel.Plan{
+		Name:                       "US070-Upstream",
+		MonthlyPrice:               decimal.NewFromFloat(9),
+		IncludedUSD:                decimal.NewFromFloat(10),
+		IsActive:                   true,
+		UpstreamSubscriptionPlanId: 4242,
+	}
+	if err := testDB.Create(&p).Error; err != nil {
+		t.Fatalf("seed plan: %v", err)
+	}
+	plans, err := ttmodel.GetActivePlans()
+	if err != nil {
+		t.Fatalf("GetActivePlans: %v", err)
+	}
+	var got *ttmodel.Plan
+	for i := range plans {
+		if plans[i].Id == p.Id {
+			got = &plans[i]
+			break
+		}
+	}
+	if got == nil {
+		t.Fatal("seeded plan not found in GetActivePlans")
+	}
+	if got.UpstreamSubscriptionPlanId != 4242 {
+		t.Fatalf("UpstreamSubscriptionPlanId want 4242 got %d", got.UpstreamSubscriptionPlanId)
+	}
+}
+
+func TestUS070_HTTP_ListPlans_IncludesUpstreamSubscriptionPlanId(t *testing.T) {
+	p := ttmodel.Plan{
+		Name:                       "US070-HTTP-Up",
+		MonthlyPrice:               decimal.NewFromFloat(11),
+		IncludedUSD:                decimal.NewFromFloat(12),
+		IsActive:                   true,
+		UpstreamSubscriptionPlanId: 9001,
+	}
+	if err := testDB.Create(&p).Error; err != nil {
+		t.Fatalf("seed plan: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/tt/subscription/plans", nil)
+	ttcontroller.ListPlans(ctx)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ListPlans HTTP %d body=%s", rec.Code, rec.Body.String())
+	}
+	var wrap struct {
+		Data []struct {
+			Id                         uint `json:"id"`
+			UpstreamSubscriptionPlanId int  `json:"upstream_subscription_plan_id"`
+		} `json:"data"`
+	}
+	if err := common.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	found := false
+	for _, row := range wrap.Data {
+		if row.Id == p.Id && row.UpstreamSubscriptionPlanId == 9001 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected plan id=%d upstream=9001 in response, got %+v", p.Id, wrap.Data)
+	}
+}
 
 func TestUS071_SubscribePlan(t *testing.T) {
 	user := &model.User{Username: "sub071", Email: "sub071@example.com", AffCode: nextAffCode("US071"), Status: 1}
@@ -205,5 +320,139 @@ func TestUS073_ViewSubscription_NoActiveReturnsNotFound(t *testing.T) {
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("expected ErrRecordNotFound, got %v", err)
+	}
+}
+
+func TestUS071_HTTP_Subscribe_RejectsPlanWithoutUpstreamMapping(t *testing.T) {
+	user := &model.User{Username: "sub071http", Email: "sub071http@example.com", AffCode: nextAffCode("US071H"), Status: 1}
+	testDB.Create(user)
+	plan := ttmodel.Plan{
+		Name:                       "Plan071NoUpstream",
+		MonthlyPrice:               decimal.NewFromFloat(10),
+		IncludedUSD:                decimal.NewFromFloat(20),
+		IsActive:                   true,
+		UpstreamSubscriptionPlanId: 0,
+	}
+	testDB.Create(&plan)
+
+	body := `{"plan_id":` + strconv.FormatUint(uint64(plan.Id), 10) + `}`
+	ctx, rec := newTTContext(t, http.MethodPost, "/tt/subscription/subscribe", []byte(body), int(user.Id))
+	ttcontroller.Subscribe(ctx)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var env struct {
+		Error struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := common.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Error.Type != "subscription_error" {
+		t.Fatalf("error.type want subscription_error got %q", env.Error.Type)
+	}
+	if !strings.Contains(env.Error.Message, "upstream_subscription_plan_id") {
+		t.Fatalf("expected upstream mapping hint in message, got %q", env.Error.Message)
+	}
+}
+
+func TestUS072_HTTP_CancelSubscription_InvalidatesUpstreamRow(t *testing.T) {
+	user := &model.User{Username: "sub072http", Email: "sub072http@example.com", AffCode: nextAffCode("US072H"), Status: 1}
+	testDB.Create(user)
+
+	sp := &ttmodel.SubscriptionPlan{
+		Title:         "HTTP Cancel Plan",
+		DurationUnit:  ttmodel.SubscriptionDurationMonth,
+		DurationValue: 1,
+		Enabled:       true,
+	}
+	if err := testDB.Create(sp).Error; err != nil {
+		t.Fatalf("seed subscription plan: %v", err)
+	}
+	now := time.Now().Unix()
+	usub := &ttmodel.UserSubscription{
+		UserId:      int(user.Id),
+		PlanId:      sp.Id,
+		Status:      "active",
+		StartTime:   now,
+		EndTime:     now + 86400*400,
+		AmountTotal: 1_000_000,
+		AmountUsed:  0,
+	}
+	if err := testDB.Create(usub).Error; err != nil {
+		t.Fatalf("seed user subscription: %v", err)
+	}
+
+	form := "reason=" + url.QueryEscape("integration-test")
+	req := httptest.NewRequest(http.MethodPost, "/tt/subscription/cancel", strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Request = req
+	ctx.Set("id", int(user.Id))
+	ttcontroller.CancelSubscription(ctx)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("CancelSubscription HTTP %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	after := time.Now().Unix()
+	var reloaded ttmodel.UserSubscription
+	if err := testDB.First(&reloaded, usub.Id).Error; err != nil {
+		t.Fatalf("reload subscription: %v", err)
+	}
+	if reloaded.Status != "cancelled" {
+		t.Fatalf("upstream subscription status want cancelled got %q", reloaded.Status)
+	}
+	if reloaded.EndTime > after+120 {
+		t.Fatalf("expected end_time near cancellation (<= after+120), got end=%d after=%d", reloaded.EndTime, after)
+	}
+}
+
+func TestUS073_HTTP_GetSubscription_PrefersUpstreamSubscription(t *testing.T) {
+	user := &model.User{Username: "sub073http", Email: "sub073http@example.com", AffCode: nextAffCode("US073H"), Status: 1}
+	testDB.Create(user)
+
+	sp := &ttmodel.SubscriptionPlan{
+		Title:         "HTTP View Upstream Title",
+		DurationUnit:  ttmodel.SubscriptionDurationMonth,
+		DurationValue: 1,
+		Enabled:       true,
+	}
+	if err := testDB.Create(sp).Error; err != nil {
+		t.Fatalf("seed subscription plan: %v", err)
+	}
+	now := time.Now().Unix()
+	usub := &ttmodel.UserSubscription{
+		UserId:      int(user.Id),
+		PlanId:      sp.Id,
+		Status:      "active",
+		StartTime:   now,
+		EndTime:     now + 86400*400,
+		AmountTotal: 1_000_000,
+		AmountUsed:  0,
+	}
+	if err := testDB.Create(usub).Error; err != nil {
+		t.Fatalf("seed user subscription: %v", err)
+	}
+
+	ctx, rec := newTTContext(t, http.MethodGet, "/tt/subscription", nil, int(user.Id))
+	ttcontroller.GetSubscription(ctx)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GetSubscription HTTP %d body=%s", rec.Code, rec.Body.String())
+	}
+	var info ttcontroller.SubscriptionInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &info); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !info.HasSubscription || info.Status != "active" {
+		t.Fatalf("unexpected subscription payload: %+v", info)
+	}
+	if info.PlanName != sp.Title {
+		t.Fatalf("PlanName want %q got %q", sp.Title, info.PlanName)
+	}
+	if info.ExpiresAt == "" {
+		t.Fatal("expected ExpiresAt from upstream end_time")
 	}
 }

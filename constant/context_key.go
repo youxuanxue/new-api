@@ -43,6 +43,10 @@ const (
 	ContextKeyAutoGroupRetryIndex ContextKey = "auto_group_retry_index"
 
 	/* user related keys */
+	ContextKeyTeamId ContextKey = "tt_team_id"
+	// ContextKeyTeamAPIKeyId is the team_api_keys.id when authenticating with a tk-team- key (TT builds).
+	ContextKeyTeamAPIKeyId ContextKey = "tt_team_api_key_id"
+
 	ContextKeyUserId      ContextKey = "id"
 	ContextKeyUserSetting ContextKey = "user_setting"
 	ContextKeyUserQuota   ContextKey = "user_quota"

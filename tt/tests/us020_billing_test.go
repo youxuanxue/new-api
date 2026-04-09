@@ -2,11 +2,17 @@ package tests
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/model"
 	ttmodel "github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/types"
+	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
@@ -442,6 +448,77 @@ func TestUS092_BudgetExceededSignaledInStatus(t *testing.T) {
 	}
 	if stM.DailyExceeded {
 		t.Fatalf("daily_limit=0 must not set daily_exceeded, got %+v", stM)
+	}
+}
+
+func TestUS092_PreConsumeBilling_BlocksPersonalRelayWhenBudgetExceeded(t *testing.T) {
+	user := createBillingTestUser(t, "US092PC", 1000000)
+	uid := uint(user.Id)
+	if _, err := ttmodel.SetBudgetConfig(uid, 1.0, 0, 0.8, true, true); err != nil {
+		t.Fatalf("SetBudgetConfig: %v", err)
+	}
+	if err := testDB.Create(&ttmodel.ConsumptionRecord{
+		UserId:        uid,
+		RequestId:     "us092pc-" + nextAffCode("req"),
+		Model:         "claude-haiku",
+		ActualCostUSD: decimal.NewFromFloat(1.0),
+		Status:        "completed",
+	}).Error; err != nil {
+		t.Fatalf("create consumption: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	relayInfo := &relaycommon.RelayInfo{UserId: int(user.Id), TeamId: 0}
+	apiErr := service.PreConsumeBilling(c, 0, relayInfo)
+	if apiErr == nil {
+		t.Fatal("expected PreConsumeBilling to block when personal daily budget exceeded")
+	}
+	if apiErr.GetErrorCode() != types.ErrorCodeBudgetExceededDaily {
+		t.Fatalf("error code: want %q got %q", types.ErrorCodeBudgetExceededDaily, apiErr.GetErrorCode())
+	}
+	if apiErr.StatusCode != http.StatusForbidden {
+		t.Fatalf("HTTP status: want 403 got %d", apiErr.StatusCode)
+	}
+}
+
+func TestUS092_PreConsumeBilling_TeamRelaySkipsPersonalBudgetGate(t *testing.T) {
+	owner := createBillingTestUser(t, "US092TM", 1000000)
+	uid := uint(owner.Id)
+	if _, err := ttmodel.SetBudgetConfig(uid, 1.0, 0, 0.8, true, true); err != nil {
+		t.Fatalf("SetBudgetConfig: %v", err)
+	}
+	if err := testDB.Create(&ttmodel.ConsumptionRecord{
+		UserId:        uid,
+		RequestId:     "us092tm-" + nextAffCode("req"),
+		Model:         "claude-haiku",
+		ActualCostUSD: decimal.NewFromFloat(1.0),
+		Status:        "completed",
+	}).Error; err != nil {
+		t.Fatalf("create consumption: %v", err)
+	}
+	st, err := ttmodel.GetBudgetStatus(uid)
+	if err != nil || !st.DailyExceeded {
+		t.Fatalf("expected personal daily exceeded before team relay test, err=%v status=%+v", err, st)
+	}
+
+	team, err := ttmodel.CreateTeam(uid, "US092 Team", "", 0)
+	if err != nil {
+		t.Fatalf("CreateTeam: %v", err)
+	}
+	if err := ttmodel.AdjustTeamBalance(team.Id, 10.0); err != nil {
+		t.Fatalf("AdjustTeamBalance: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	relayInfo := &relaycommon.RelayInfo{UserId: int(owner.Id), TeamId: int(team.Id)}
+	apiErr := service.PreConsumeBilling(c, 0, relayInfo)
+	if apiErr != nil {
+		t.Fatalf("team relay must not be blocked by member personal budget: %v", apiErr)
+	}
+	if relayInfo.Billing == nil {
+		t.Fatal("expected BillingSession on relayInfo after successful PreConsumeBilling")
 	}
 }
 

@@ -428,6 +428,7 @@ func createOrUpdateSSOUser(config *ttmodel.SSOConfig, userInfo *OIDCUserInfo) (*
 			if err := ttmodel.DB.Create(&user).Error; err != nil {
 				return nil, fmt.Errorf("failed to create user: %w", err)
 			}
+			ttmodel.RunPostUserCreationHooks(user.Id)
 		} else {
 			return nil, fmt.Errorf("user not found and JIT creation is disabled")
 		}

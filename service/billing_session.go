@@ -56,7 +56,7 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	}
 	// 2) 调整令牌额度
 	var tokenErr error
-	if !s.relayInfo.IsPlayground {
+	if !s.relayInfo.IsPlayground && s.relayInfo.TeamId == 0 {
 		if delta > 0 {
 			tokenErr = model.DecreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
 		} else {
@@ -96,6 +96,7 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	tokenId := s.relayInfo.TokenId
 	tokenKey := s.relayInfo.TokenKey
 	isPlayground := s.relayInfo.IsPlayground
+	teamId := s.relayInfo.TeamId
 	tokenConsumed := s.tokenConsumed
 	funding := s.funding
 
@@ -105,7 +106,7 @@ func (s *BillingSession) Refund(c *gin.Context) {
 			common.SysLog("error refunding billing source: " + err.Error())
 		}
 		// 2) 退还令牌额度
-		if tokenConsumed > 0 && !isPlayground {
+		if tokenConsumed > 0 && !isPlayground && teamId == 0 {
 			if err := model.IncreaseTokenQuota(tokenId, tokenKey, tokenConsumed); err != nil {
 				common.SysLog("error refunding token quota: " + err.Error())
 			}
@@ -216,6 +217,8 @@ func (s *BillingSession) shouldTrust(c *gin.Context) bool {
 	switch s.funding.Source() {
 	case BillingSourceWallet:
 		return s.relayInfo.UserQuota > trustQuota
+	case BillingSourceTeam:
+		return false
 	case BillingSourceSubscription:
 		// 订阅不能启用信任旁路。原因：
 		// 1. PreConsumeUserSubscription 要求 amount>0 来创建预扣记录并锁定订阅
@@ -255,6 +258,10 @@ func (s *BillingSession) syncRelayInfo() {
 func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
 	if relayInfo == nil {
 		return nil, types.NewError(fmt.Errorf("relayInfo is nil"), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+	}
+
+	if session, apiErr := maybeTeamBillingSession(c, relayInfo, preConsumedQuota); session != nil || apiErr != nil {
+		return session, apiErr
 	}
 
 	pref := common.NormalizeBillingPreference(relayInfo.UserSetting.BillingPreference)

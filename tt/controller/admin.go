@@ -615,15 +615,16 @@ func ListAdminPlans(c *gin.Context) {
 
 // CreatePlanRequest 创建套餐请求
 type CreatePlanRequest struct {
-	Name          string `json:"name" binding:"required"`
-	DisplayName   string `json:"display_name"`
-	Description   string `json:"description"`
-	MonthlyPrice  string `json:"monthly_price" binding:"required"`
-	IncludedUSD   string `json:"included_usd" binding:"required"`
-	DiscountRate  string `json:"discount_rate"`
-	MaxAPIKeys    int    `json:"max_api_keys"`
-	MaxSubAccounts int   `json:"max_sub_accounts"`
-	Features      string `json:"features"`
+	Name                       string `json:"name" binding:"required"`
+	DisplayName                string `json:"display_name"`
+	Description                string `json:"description"`
+	MonthlyPrice               string `json:"monthly_price" binding:"required"`
+	IncludedUSD                string `json:"included_usd" binding:"required"`
+	DiscountRate               string `json:"discount_rate"`
+	MaxAPIKeys                 int    `json:"max_api_keys"`
+	MaxSubAccounts             int    `json:"max_sub_accounts"`
+	Features                   string `json:"features"`
+	UpstreamSubscriptionPlanId *int   `json:"upstream_subscription_plan_id,omitempty"` // 对应 subscription_plans.id；创建时 >0 生效，更新时 nil 表示不改
 }
 
 // CreatePlan 创建套餐
@@ -637,7 +638,11 @@ func CreatePlan(c *gin.Context) {
 	adminId := c.GetInt("admin_id")
 	ttmodel.RecordAdminAudit(adminId, "CREATE_PLAN", req.Name, "plan", c)
 
-	plan, err := ttmodel.CreatePlanByAdmin(req.Name, req.DisplayName, req.Description, req.MonthlyPrice, req.IncludedUSD, req.DiscountRate, req.MaxAPIKeys, req.MaxSubAccounts, req.Features)
+	up := 0
+	if req.UpstreamSubscriptionPlanId != nil {
+		up = *req.UpstreamSubscriptionPlanId
+	}
+	plan, err := ttmodel.CreatePlanByAdmin(req.Name, req.DisplayName, req.Description, req.MonthlyPrice, req.IncludedUSD, req.DiscountRate, req.MaxAPIKeys, req.MaxSubAccounts, req.Features, up)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -664,7 +669,7 @@ func UpdatePlan(c *gin.Context) {
 	adminId := c.GetInt("admin_id")
 	ttmodel.RecordAdminAudit(adminId, "UPDATE_PLAN", planId, "plan", c)
 
-	err = ttmodel.UpdatePlanByAdmin(uint(id), req.DisplayName, req.Description, req.MonthlyPrice, req.IncludedUSD, req.DiscountRate, req.MaxAPIKeys, req.MaxSubAccounts, req.Features)
+	err = ttmodel.UpdatePlanByAdmin(uint(id), req.DisplayName, req.Description, req.MonthlyPrice, req.IncludedUSD, req.DiscountRate, req.MaxAPIKeys, req.MaxSubAccounts, req.Features, req.UpstreamSubscriptionPlanId)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -946,4 +951,60 @@ func TestWebhook(c *gin.Context) {
 		"success": true,
 		"result":  result,
 	})
+}
+
+// ========== 团队运营 ==========
+
+// AdjustTeamBalanceRequest 调整团队余额（USD）
+type AdjustTeamBalanceRequest struct {
+	Amount float64 `json:"amount" binding:"required"` // 正数充值，负数扣减
+}
+
+// AdminAdjustTeamBalance 超级管理员调整团队 USD 余额
+func AdminAdjustTeamBalance(c *gin.Context) {
+	teamIdStr := c.Param("id")
+	tid, err := strconv.Atoi(teamIdStr)
+	if err != nil || tid <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid team id"})
+		return
+	}
+	var req AdjustTeamBalanceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	if err := ttmodel.AdjustTeamBalance(uint(tid), req.Amount); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	adminId := c.GetInt("admin_id")
+	ttmodel.RecordAdminAudit(adminId, "ADJUST_TEAM_BALANCE", teamIdStr, "team", c)
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// SetTeamMonthlyLimitRequest 团队月限额（USD，0 表示不限制）
+type SetTeamMonthlyLimitRequest struct {
+	MonthlyLimit float64 `json:"monthly_limit"`
+}
+
+// AdminSetTeamMonthlyLimit 设置团队月度消费上限（USD）
+func AdminSetTeamMonthlyLimit(c *gin.Context) {
+	teamIdStr := c.Param("id")
+	tid, err := strconv.Atoi(teamIdStr)
+	if err != nil || tid <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid team id"})
+		return
+	}
+	var req SetTeamMonthlyLimitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	if err := ttmodel.SetTeamMonthlyLimit(uint(tid), req.MonthlyLimit); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	adminId := c.GetInt("admin_id")
+	ttmodel.RecordAdminAudit(adminId, "SET_TEAM_MONTHLY_LIMIT", teamIdStr, "team", c)
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	gwapi "github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/common"
 	ttmodel "github.com/QuantumNous/new-api/model"
 	ttservice "github.com/QuantumNous/new-api/tt/service"
@@ -396,6 +397,22 @@ func GetSubscription(c *gin.Context) {
 		return
 	}
 
+	// 优先展示上游 subscription_plans / user_subscriptions（与 relay 计费一致）
+	if subs, err := ttmodel.GetAllActiveUserSubscriptions(userId); err == nil && len(subs) > 0 && subs[0].Subscription != nil {
+		sub := subs[0].Subscription
+		title := ""
+		if plan, perr := ttmodel.GetSubscriptionPlanById(sub.PlanId); perr == nil && plan != nil {
+			title = plan.Title
+		}
+		c.JSON(http.StatusOK, SubscriptionInfo{
+			HasSubscription: true,
+			PlanName:        title,
+			Status:          sub.Status,
+			ExpiresAt:       time.Unix(sub.EndTime, 0).UTC().Format(time.RFC3339),
+		})
+		return
+	}
+
 	info, err := ttmodel.GetUserSubscription(userId)
 	if err != nil {
 		c.JSON(http.StatusOK, SubscriptionInfo{HasSubscription: false})
@@ -407,11 +424,13 @@ func GetSubscription(c *gin.Context) {
 
 // SubscribeRequest 订阅请求
 type SubscribeRequest struct {
-	PlanId        uint   `json:"plan_id" binding:"required"`
-	BillingCycle  string `json:"billing_cycle"` // monthly/yearly
+	PlanId         uint   `json:"plan_id" binding:"required"`
+	BillingCycle   string `json:"billing_cycle"` // 保留字段；支付完成后由上游订阅周期决定
+	PaymentChannel string `json:"payment_channel"` // stripe（默认）| epay（易支付：微信/支付宝等）
+	EpayMethod     string `json:"epay_method"`     // epay 时必填，取值与系统易支付配置一致（如 alipay、wxpay）
 }
 
-// Subscribe 订阅套餐
+// Subscribe 发起订阅支付：TT plans 为目录，实际扣费与 relay 走 subscription_plans + 支付网关。
 func Subscribe(c *gin.Context) {
 	userId := c.GetInt("id")
 	if userId == 0 {
@@ -425,22 +444,85 @@ func Subscribe(c *gin.Context) {
 		return
 	}
 
-	sub, err := ttmodel.CreateSubscription(userId, req.PlanId, req.BillingCycle)
-	if err != nil {
+	catalog, err := ttmodel.GetTTPlanById(req.PlanId)
+	if err != nil || catalog == nil || !catalog.IsActive {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
 				"type":    "subscription_error",
-				"message": err.Error(),
+				"message": "套餐不存在或未上架",
+			},
+		})
+		return
+	}
+	up := catalog.UpstreamSubscriptionPlanId
+	if up <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"type":    "subscription_error",
+				"message": "套餐未完成支付对接：请在管理后台为该 TT 套餐配置 upstream_subscription_plan_id（对应 subscription_plans.id）",
 			},
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success":      true,
-		"subscription": sub,
-		"message":      "订阅成功",
-	})
+	ch := req.PaymentChannel
+	if ch == "" {
+		ch = "stripe"
+	}
+
+	switch ch {
+	case "stripe":
+		payLink, err := gwapi.StartSubscriptionStripeCheckout(userId, int(up))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"type":    "subscription_error",
+					"message": err.Error(),
+				},
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success":         true,
+			"payment_channel": "stripe",
+			"pay_link":        payLink,
+			"message":         "请在支付完成后等待订单生效",
+		})
+	case "epay":
+		if req.EpayMethod == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"type":    "subscription_error",
+					"message": "epay_method 必填（易支付渠道，如 alipay / wxpay）",
+				},
+			})
+			return
+		}
+		payURL, payData, err := gwapi.StartSubscriptionEpayCheckout(userId, int(up), req.EpayMethod)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"type":    "subscription_error",
+					"message": err.Error(),
+				},
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success":         true,
+			"payment_channel": "epay",
+			"url":             payURL,
+			"data":            payData,
+			"message":         "请在支付完成后等待订单生效",
+		})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"type":    "subscription_error",
+				"message": "不支持的 payment_channel，请使用 stripe 或 epay",
+			},
+		})
+	}
 }
 
 // CancelSubscription 取消订阅
@@ -453,28 +535,32 @@ func CancelSubscription(c *gin.Context) {
 
 	reason := c.PostForm("reason")
 
-	err := ttmodel.CancelUserSubscription(userId, reason)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	if subs, err := ttmodel.GetAllActiveUserSubscriptions(userId); err == nil {
+		for _, sum := range subs {
+			if sum.Subscription != nil {
+				_, _ = ttmodel.AdminInvalidateUserSubscription(sum.Subscription.Id)
+			}
+		}
 	}
+	_ = ttmodel.CancelUserSubscription(userId, reason)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "订阅已取消，将在当前计费周期结束后失效",
+		"message": "订阅已取消",
 	})
 }
 
 // PlanInfo 套餐信息
 type PlanInfo struct {
-	Id           uint   `json:"id"`
-	Name         string `json:"name"`
-	DisplayName  string `json:"display_name"`
-	Description  string `json:"description"`
-	MonthlyPrice string `json:"monthly_price"`
-	IncludedUSD  string `json:"included_usd"`
-	DiscountRate string `json:"discount_rate"`
-	Features     string `json:"features"`
+	Id                         uint   `json:"id"`
+	Name                       string `json:"name"`
+	DisplayName                string `json:"display_name"`
+	Description                string `json:"description"`
+	MonthlyPrice               string `json:"monthly_price"`
+	IncludedUSD                string `json:"included_usd"`
+	DiscountRate               string `json:"discount_rate"`
+	Features                   string `json:"features"`
+	UpstreamSubscriptionPlanId int    `json:"upstream_subscription_plan_id"`
 }
 
 // ListPlans 列出套餐
@@ -488,14 +574,15 @@ func ListPlans(c *gin.Context) {
 	result := make([]PlanInfo, len(plans))
 	for i, p := range plans {
 		result[i] = PlanInfo{
-			Id:           p.Id,
-			Name:         p.Name,
-			DisplayName:  p.DisplayName,
-			Description:  p.Description,
-			MonthlyPrice: p.MonthlyPrice.StringFixed(2),
-			IncludedUSD:  p.IncludedUSD.StringFixed(2),
-			DiscountRate: p.DiscountRate.StringFixed(2),
-			Features:     p.Features,
+			Id:                         p.Id,
+			Name:                       p.Name,
+			DisplayName:                p.DisplayName,
+			Description:                p.Description,
+			MonthlyPrice:               p.MonthlyPrice.StringFixed(2),
+			IncludedUSD:                p.IncludedUSD.StringFixed(2),
+			DiscountRate:               p.DiscountRate.StringFixed(2),
+			Features:                   p.Features,
+			UpstreamSubscriptionPlanId: p.UpstreamSubscriptionPlanId,
 		}
 	}
 
@@ -927,7 +1014,7 @@ func RevokeTeamAPIKey(c *gin.Context) {
 		return
 	}
 
-	err = ttmodel.RevokeTeamAPIKey(uint(kid))
+	err = ttmodel.RevokeTeamAPIKey(uint(tid), uint(kid))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

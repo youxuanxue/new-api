@@ -399,6 +399,15 @@ func GetActivePlans() ([]Plan, error) {
 	return plans, err
 }
 
+// GetTTPlanById loads a catalog row from plans by primary key.
+func GetTTPlanById(id uint) (*Plan, error) {
+	var p Plan
+	if err := DB.First(&p, id).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 // ========== 公开统计 ==========
 
 // PublicStats 公开统计数据
@@ -1095,7 +1104,7 @@ func GetAllPlans() ([]Plan, error) {
 	return plans, err
 }
 
-func CreatePlanByAdmin(name, displayName, description, monthlyPrice, includedUSD, discountRate string, maxAPIKeys, maxSubAccounts int, features string) (*Plan, error) {
+func CreatePlanByAdmin(name, displayName, description, monthlyPrice, includedUSD, discountRate string, maxAPIKeys, maxSubAccounts int, features string, upstreamSubscriptionPlanId int) (*Plan, error) {
 	plan := Plan{
 		Name:        name,
 		DisplayName: displayName,
@@ -1134,6 +1143,9 @@ func CreatePlanByAdmin(name, displayName, description, monthlyPrice, includedUSD
 	if features != "" {
 		plan.Features = features
 	}
+	if upstreamSubscriptionPlanId > 0 {
+		plan.UpstreamSubscriptionPlanId = upstreamSubscriptionPlanId
+	}
 
 	err := DB.Create(&plan).Error
 	if err != nil {
@@ -1143,7 +1155,7 @@ func CreatePlanByAdmin(name, displayName, description, monthlyPrice, includedUSD
 	return &plan, nil
 }
 
-func UpdatePlanByAdmin(id uint, displayName, description, monthlyPrice, includedUSD, discountRate string, maxAPIKeys, maxSubAccounts int, features string) error {
+func UpdatePlanByAdmin(id uint, displayName, description, monthlyPrice, includedUSD, discountRate string, maxAPIKeys, maxSubAccounts int, features string, upstreamSubscriptionPlanId *int) error {
 	updates := map[string]interface{}{}
 
 	if displayName != "" {
@@ -1181,6 +1193,9 @@ func UpdatePlanByAdmin(id uint, displayName, description, monthlyPrice, included
 	}
 	if features != "" {
 		updates["features"] = features
+	}
+	if upstreamSubscriptionPlanId != nil {
+		updates["upstream_subscription_plan_id"] = *upstreamSubscriptionPlanId
 	}
 
 	if len(updates) == 0 {

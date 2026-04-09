@@ -88,6 +88,9 @@ type RelayInfo struct {
 	TokenKey          string
 	TokenGroup        string
 	UserId            int
+	// TeamId is set when the request is authenticated with a team API key (tk-team-...). 0 means personal token.
+	TeamId         int
+	TeamAPIKeyId   int
 	UsingGroup        string // 使用的分组，当auto跨分组重试时，会变动
 	UserGroup         string // 用户所在分组
 	TokenUnlimited    bool
@@ -449,7 +452,9 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		Request: request,
 
 		RequestId:  reqId,
-		UserId:     common.GetContextKeyInt(c, constant.ContextKeyUserId),
+		UserId:       common.GetContextKeyInt(c, constant.ContextKeyUserId),
+		TeamId:       common.GetContextKeyInt(c, constant.ContextKeyTeamId),
+		TeamAPIKeyId: common.GetContextKeyInt(c, constant.ContextKeyTeamAPIKeyId),
 		UsingGroup: common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
 		UserGroup:  common.GetContextKeyString(c, constant.ContextKeyUserGroup),
 		UserQuota:  common.GetContextKeyInt(c, constant.ContextKeyUserQuota),

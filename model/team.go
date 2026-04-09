@@ -4,11 +4,15 @@
 package model
 
 import (
+	"crypto/rand"
 	"errors"
 	"time"
 
 	"gorm.io/gorm"
 )
+
+// QuotaUnitsPerUSD matches TT balance display: user quota / QuotaUnitsPerUSD ≈ USD.
+const QuotaUnitsPerUSD = 500000
 
 // ========== 团队 ==========
 
@@ -24,6 +28,10 @@ type Team struct {
 	Balance      float64 `json:"balance" gorm:"default:0"`
 	UsedQuota    int     `json:"used_quota" gorm:"default:0"`
 	MonthlyLimit float64 `json:"monthly_limit" gorm:"default:0"` // 月限额
+
+	// 月度用量（配额单位），随自然月重置；与 MonthlyLimit（USD）配合使用
+	BillingPeriodYm      int `json:"billing_period_ym" gorm:"default:0"`       // YYYYMM
+	MonthlyConsumedUnits int `json:"monthly_consumed_units" gorm:"default:0"` // quota units this month
 
 	// 状态
 	Status      string    `json:"status" gorm:"size:20;default:'active'"` // active/suspended
@@ -264,8 +272,14 @@ func generateTeamAPIKey() string {
 func randomString(n int) string {
 	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, n)
-	for i := range b {
-		b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
+	if _, err := rand.Read(b); err != nil {
+		for i := range b {
+			b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
+		}
+	} else {
+		for i := range b {
+			b[i] = letters[int(b[i])%len(letters)]
+		}
 	}
 	return string(b)
 }
@@ -277,10 +291,150 @@ func ListTeamAPIKeys(teamId uint) ([]TeamAPIKey, error) {
 	return keys, err
 }
 
-// RevokeTeamAPIKey 撤销团队API Key
-func RevokeTeamAPIKey(keyId uint) error {
-	return DB.Model(&TeamAPIKey{}).Where("id = ?", keyId).
-		Update("status", "revoked").Error
+// RevokeTeamAPIKey 撤销团队API Key（必须属于指定团队）
+func RevokeTeamAPIKey(teamId, keyId uint) error {
+	res := DB.Model(&TeamAPIKey{}).Where("id = ? AND team_id = ? AND status = ?", keyId, teamId, "active").
+		Update("status", "revoked")
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return errors.New("api key not found or not in team")
+	}
+	return nil
+}
+
+// GetTeamAPIKeyForRelay 根据完整密钥解析团队与密钥行（仅 active）
+func GetTeamAPIKeyForRelay(fullKey string) (*TeamAPIKey, *Team, error) {
+	var key TeamAPIKey
+	if err := DB.Where("key = ? AND status = ?", fullKey, "active").First(&key).Error; err != nil {
+		return nil, nil, err
+	}
+	var team Team
+	if err := DB.First(&team, key.TeamId).Error; err != nil {
+		return nil, nil, err
+	}
+	return &key, &team, nil
+}
+
+func currentBillingPeriodYM() int {
+	now := time.Now()
+	return now.Year()*100 + int(now.Month())
+}
+
+// EnsureTeamBillingPeriod resets monthly counters when calendar month changes.
+func EnsureTeamBillingPeriod(teamId uint) error {
+	ym := currentBillingPeriodYM()
+	return DB.Model(&Team{}).Where("id = ? AND billing_period_ym <> ?", teamId, ym).
+		Updates(map[string]interface{}{
+			"billing_period_ym":        ym,
+			"monthly_consumed_units":   0,
+		}).Error
+}
+
+// QuotaUnitsFromUSD converts USD balance to comparable quota units (floor).
+func QuotaUnitsFromUSD(usd float64) int {
+	if usd <= 0 {
+		return 0
+	}
+	return int(usd * float64(QuotaUnitsPerUSD))
+}
+
+// USDFromQuotaUnits converts quota units to USD.
+func USDFromQuotaUnits(units int) float64 {
+	if units <= 0 {
+		return 0
+	}
+	return float64(units) / float64(QuotaUnitsPerUSD)
+}
+
+// GetTeamSpendableQuotaUnits returns remaining quota units from team USD balance after syncing billing month.
+func GetTeamSpendableQuotaUnits(teamId uint) (int, error) {
+	if err := EnsureTeamBillingPeriod(teamId); err != nil {
+		return 0, err
+	}
+	var team Team
+	if err := DB.First(&team, teamId).Error; err != nil {
+		return 0, err
+	}
+	if team.Status != "active" {
+		return 0, errors.New("team is not active")
+	}
+	units := QuotaUnitsFromUSD(team.Balance)
+	if team.MonthlyLimit > 0 {
+		capUnits := QuotaUnitsFromUSD(team.MonthlyLimit)
+		remainingMonth := capUnits - team.MonthlyConsumedUnits
+		if remainingMonth < 0 {
+			remainingMonth = 0
+		}
+		if remainingMonth < units {
+			units = remainingMonth
+		}
+	}
+	return units, nil
+}
+
+// PreConsumeTeamBalance pre-deducts quota units from team USD balance (transactional).
+func PreConsumeTeamBalance(teamId uint, quotaUnits int) error {
+	if quotaUnits <= 0 {
+		return nil
+	}
+	usd := USDFromQuotaUnits(quotaUnits)
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var team Team
+		if err := tx.First(&team, teamId).Error; err != nil {
+			return err
+		}
+		ym := currentBillingPeriodYM()
+		monthlyBase := team.MonthlyConsumedUnits
+		if team.BillingPeriodYm != ym {
+			monthlyBase = 0
+		}
+		if team.Status != "active" {
+			return errors.New("team is not active")
+		}
+		if team.Balance < usd {
+			return errors.New("team balance insufficient")
+		}
+		if team.MonthlyLimit > 0 {
+			capUnits := QuotaUnitsFromUSD(team.MonthlyLimit)
+			if monthlyBase+quotaUnits > capUnits {
+				return errors.New("team monthly limit exceeded")
+			}
+		}
+		res := tx.Model(&Team{}).Where("id = ? AND balance >= ?", teamId, usd).
+			Updates(map[string]interface{}{
+				"balance":                gorm.Expr("balance - ?", usd),
+				"used_quota":             gorm.Expr("used_quota + ?", quotaUnits),
+				"monthly_consumed_units": monthlyBase + quotaUnits,
+				"billing_period_ym":      ym,
+			})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return errors.New("team balance insufficient")
+		}
+		return nil
+	})
+}
+
+// DeltaTeamBalance adjusts team balance by quota units (positive = charge more, negative = refund).
+func DeltaTeamBalance(teamId uint, deltaQuotaUnits int) error {
+	if deltaQuotaUnits == 0 {
+		return nil
+	}
+	usd := USDFromQuotaUnits(deltaQuotaUnits)
+	if deltaQuotaUnits > 0 {
+		return PreConsumeTeamBalance(teamId, deltaQuotaUnits)
+	}
+	// refund
+	refund := -usd
+	return DB.Model(&Team{}).Where("id = ?", teamId).
+		Updates(map[string]interface{}{
+			"balance":    gorm.Expr("balance + ?", refund),
+			"used_quota": gorm.Expr("used_quota - ?", -deltaQuotaUnits),
+		}).Error
 }
 
 // GetTeamAPIKeyRateLimit returns the rate limit (requests/min) for the given

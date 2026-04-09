@@ -417,6 +417,7 @@ export default function SettingsChats(props) {
               <Space style={{ marginBottom: 16 }}>
                 <Button
                   type='primary'
+                  theme='solid'
                   icon={<IconPlus />}
                   onClick={handleAddConfig}
                 >
@@ -441,7 +442,7 @@ export default function SettingsChats(props) {
                     },
                   ]}
                 >
-                  <Button icon={<IconBolt />}>
+                  <Button type='primary' theme='outline' icon={<IconBolt />}>
                     {t('填入模板')}
                   </Button>
                 </Dropdown>
@@ -516,6 +517,7 @@ export default function SettingsChats(props) {
           <Space>
             <Button
               type='primary'
+              theme='solid'
               icon={<IconSaveStroked />}
               onClick={onSubmit}
             >
