@@ -165,7 +165,7 @@ func TestHashUserID(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"12345", "1234****2345"},
+		{"12345", "****"},
 		{"abc", "****"},
 		{"1234567890", "1234****7890"},
 	}

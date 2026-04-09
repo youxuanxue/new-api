@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"time"
@@ -13,7 +14,12 @@ import (
 	ttservice "github.com/QuantumNous/new-api/tt/service"
 )
 
+var stopTTTasks context.CancelFunc = func() {}
+
 func startTTBootstrapTasks() {
+	taskCtx, cancel := context.WithCancel(context.Background())
+	stopTTTasks = cancel
+
 	hooks.InitHooks()
 	common.InitFeishuAlert()
 	ttservice.SetSub2APIConfig(ttservice.Sub2APIConfig{
@@ -30,8 +36,16 @@ func startTTBootstrapTasks() {
 	})
 	go func() {
 		time.Sleep(5 * time.Second)
-		ttservice.StartPoolSyncTask()
+		ttservice.StartPoolSyncTaskWithContext(taskCtx)
 	}()
+	go func() {
+		time.Sleep(10 * time.Second)
+		ttservice.StartBanDetectionTaskWithContext(taskCtx)
+	}()
+}
+
+func stopTTBootstrapTasks() {
+	stopTTTasks()
 }
 
 func envOrDefault(key, defaultVal string) string {

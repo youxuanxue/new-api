@@ -1,8 +1,6 @@
 //go:build tt
 // +build tt
 
-// Package router provides HTTP routing
-// main_tt.go - TT-specific router initialization (only included in TT builds)
 package router
 
 import (
@@ -14,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// initTT registers TT-specific routes
+// initTT registers TT-specific routes and middleware.
 func initTT(router *gin.Engine) {
 	if err := middleware.InitSecurityProxy(); err != nil {
 		common.SysError("InitSecurityProxy failed: " + err.Error())

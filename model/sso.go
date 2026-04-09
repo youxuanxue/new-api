@@ -4,6 +4,7 @@
 package model
 
 import (
+	"strings"
 	"time"
 )
 
@@ -206,7 +207,11 @@ func (c *SSOConfig) IsEmailAllowedForSSO(email string) bool {
 	emailDomain := extractEmailDomain(email)
 
 	for _, domain := range domains {
-		if domain == emailDomain {
+		d := strings.TrimSpace(domain)
+		if d == "" {
+			continue
+		}
+		if d == emailDomain {
 			return true
 		}
 	}

@@ -99,37 +99,51 @@ func SendFeishuAlert(title, content, level string) {
 	go doFeishuPost(payload)
 }
 
-func doFeishuPost(payload string) {
-	url := feishuWebhookURL
+var feishuHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
+func doFeishuPost(payload string) {
 	if feishuWebhookSecret != "" {
-		ts := strconv.FormatInt(time.Now().Unix(), 10)
-		sign := genFeishuSign(ts, feishuWebhookSecret)
-		// Inject timestamp and sign into payload
-		payload = injectSignFields(payload, ts, sign)
+		payload = buildSignedPayload(payload)
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewBufferString(payload))
-	if err != nil {
-		SysError("feishu alert send failed: " + err.Error())
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			time.Sleep(2 * time.Second)
+		}
+
+		resp, err := feishuHTTPClient.Post(feishuWebhookURL, "application/json", bytes.NewBufferString(payload))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode >= 500 {
+			lastErr = fmt.Errorf("feishu 5xx: status=%d body=%s", resp.StatusCode, string(body))
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			SysError(fmt.Sprintf("feishu alert non-200: status=%d body=%s", resp.StatusCode, string(body)))
+		}
 		return
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		SysError(fmt.Sprintf("feishu alert non-200: status=%d body=%s", resp.StatusCode, string(body)))
+	if lastErr != nil {
+		SysError("feishu alert send failed after retry: " + lastErr.Error())
 	}
+}
+
+func buildSignedPayload(payload string) string {
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	sign := genFeishuSign(ts, feishuWebhookSecret)
+	return fmt.Sprintf(`{"timestamp":"%s","sign":"%s",%s`, ts, sign, payload[1:])
 }
 
 func genFeishuSign(timestamp, secret string) string {
 	stringToSign := timestamp + "\n" + secret
 	h := hmac.New(sha256.New, []byte(stringToSign))
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
-}
-
-func injectSignFields(payload, timestamp, sign string) string {
-	// Insert timestamp and sign at the top level of the JSON object
-	return fmt.Sprintf(`{"timestamp":"%s","sign":"%s",%s`, timestamp, sign, payload[1:])
 }
 
 func levelToColor(level string) string {

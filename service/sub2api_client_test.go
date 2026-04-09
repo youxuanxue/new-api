@@ -7,6 +7,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -113,6 +115,38 @@ func TestListAccountsError(t *testing.T) {
 	_, err := client.ListAccounts(ctx)
 	if err == nil {
 		t.Error("Expected error for 500 response, got nil")
+	}
+}
+
+// TestUS155_ListAccounts5xxRetriesUntilExhausted verifies 5xx triggers doWithRetry until MaxRetryCount is exhausted.
+func TestUS155_ListAccounts5xxRetriesUntilExhausted(t *testing.T) {
+	prev := GetPoolSyncConfig()
+	defer SetPoolSyncConfig(prev)
+	SetPoolSyncConfig(PoolSyncConfig{
+		SyncInterval:     prev.SyncInterval,
+		RefreshBefore:    prev.RefreshBefore,
+		BanCheckInterval: prev.BanCheckInterval,
+		MaxRetryCount:    2,
+		CooldownDuration: prev.CooldownDuration,
+	})
+
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := NewSub2APIClient(server.URL, "test-key")
+	_, err := client.ListAccounts(context.Background())
+	if err == nil {
+		t.Fatal("expected error after retries")
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("expected 2 HTTP attempts for MaxRetryCount=2, got %d", calls.Load())
+	}
+	if !strings.Contains(err.Error(), "sub2api request failed after 2 attempts") {
+		t.Fatalf("expected wrapped retry exhaustion error, got: %v", err)
 	}
 }
 

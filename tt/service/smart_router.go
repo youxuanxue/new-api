@@ -74,8 +74,8 @@ type RouterRequest struct {
 
 // RouterMessage 路由消息
 type RouterMessage struct {
-	Role    string
-	Content string
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 // ComplexityScore 复杂度得分

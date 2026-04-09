@@ -1,10 +1,12 @@
 package claude
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -354,13 +356,46 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 						if source == nil {
 							continue
 						}
+						// For OpenAI file content, preserve filename-derived mime hints
+						// so PDF/TXT can be mapped correctly for Claude.
+						if mediaMessage.Type == dto.ContentTypeFile {
+							if file := mediaMessage.GetFile(); file != nil && file.FileName != "" {
+								ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(file.FileName)), ".")
+								if ext != "" {
+									if b64Src, ok := source.(*types.Base64Source); ok && b64Src.MimeType == "" {
+										b64Src.MimeType = service.GetMimeTypeByExtension(ext)
+									}
+								}
+							}
+						}
 						base64Data, mimeType, err := service.GetBase64Data(c, source, "formatting image for Claude")
 						if err != nil {
 							return nil, fmt.Errorf("get file data failed: %s", err.Error())
 						}
+
+						// Claude supports image/document blocks. Text files are converted to text,
+						// unknown binary files are skipped for safety.
+						if strings.HasPrefix(mimeType, "text/") {
+							decodedText, decodeErr := base64.StdEncoding.DecodeString(base64Data)
+							if decodeErr == nil {
+								text := string(decodedText)
+								claudeMediaMessages = append(claudeMediaMessages, dto.ClaudeMediaMessage{
+									Type: "text",
+									Text: common.GetPointer[string](text),
+								})
+							}
+							continue
+						}
+
+						if !strings.HasPrefix(mimeType, "application/pdf") && !strings.HasPrefix(mimeType, "image/") {
+							continue
+						}
+
 						claudeMediaMessage := dto.ClaudeMediaMessage{
 							Source: &dto.ClaudeMessageSource{
-								Type: "base64",
+								Type:      "base64",
+								MediaType: mimeType,
+								Data:      base64Data,
 							},
 						}
 						if strings.HasPrefix(mimeType, "application/pdf") {
@@ -368,9 +403,6 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 						} else {
 							claudeMediaMessage.Type = "image"
 						}
-
-						claudeMediaMessage.Source.MediaType = mimeType
-						claudeMediaMessage.Source.Data = base64Data
 						claudeMediaMessages = append(claudeMediaMessages, claudeMediaMessage)
 						continue
 					}

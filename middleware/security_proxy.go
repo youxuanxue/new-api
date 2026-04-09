@@ -133,6 +133,9 @@ func parseLogLevel(s string) LogLevel {
 
 // initDebugLog 初始化调试日志
 func initDebugLog() error {
+	if err := os.MkdirAll("/var/log/tt", 0750); err != nil {
+		return err
+	}
 	var err error
 	debugLogFile, err = os.OpenFile("/var/log/tt/debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)
 	if err != nil {

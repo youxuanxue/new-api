@@ -14,24 +14,32 @@ import (
 // acquire Lock when swapping writers and closing old files.
 var LogWriterMu sync.RWMutex
 
+// sysLogFormatter controls the output format.  Defaults to plain text; TT
+// builds override this to JSON via init() in sys_log_format_tt.go.
+var sysLogFormatter func(level, msg string) string
+
+func formatLogLine(level, msg string) string {
+	if sysLogFormatter != nil {
+		return sysLogFormatter(level, msg)
+	}
+	return fmt.Sprintf("[SYS] %v | %s", time.Now().Format("2006/01/02 - 15:04:05"), msg)
+}
+
 func SysLog(s string) {
-	t := time.Now()
 	LogWriterMu.RLock()
-	_, _ = fmt.Fprintf(gin.DefaultWriter, "[SYS] %v | %s \n", t.Format("2006/01/02 - 15:04:05"), s)
+	_, _ = fmt.Fprintln(gin.DefaultWriter, formatLogLine("info", s))
 	LogWriterMu.RUnlock()
 }
 
 func SysError(s string) {
-	t := time.Now()
 	LogWriterMu.RLock()
-	_, _ = fmt.Fprintf(gin.DefaultErrorWriter, "[SYS] %v | %s \n", t.Format("2006/01/02 - 15:04:05"), s)
+	_, _ = fmt.Fprintln(gin.DefaultErrorWriter, formatLogLine("error", s))
 	LogWriterMu.RUnlock()
 }
 
 func FatalLog(v ...any) {
-	t := time.Now()
 	LogWriterMu.RLock()
-	_, _ = fmt.Fprintf(gin.DefaultErrorWriter, "[FATAL] %v | %v \n", t.Format("2006/01/02 - 15:04:05"), v)
+	_, _ = fmt.Fprintln(gin.DefaultErrorWriter, formatLogLine("fatal", fmt.Sprint(v...)))
 	LogWriterMu.RUnlock()
 	os.Exit(1)
 }

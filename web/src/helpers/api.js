@@ -457,10 +457,6 @@ export const TT_API = {
   runPlaygroundSingle: (data) => API.post('/tt/playground/run/single', data),
   getPlaygroundHistory: () => API.get('/tt/playground/history'),
 
-  // Cache (V2.0)
-  getCacheStats: () => API.get('/tt/cache/stats'),
-  clearCache: () => API.post('/tt/cache/clear'),
-
   // SLA (V2.0)
   getSLAStatus: () => API.get('/tt/sla/status'),
   getSLAReports: (params) => API.get('/tt/sla/reports', { params }),
@@ -492,8 +488,24 @@ export const TT_ADMIN_API = {
   listUsers: (params) => API.get('/admin/users', { params }),
   getUser: (userId) => API.get(`/admin/users/${userId}`),
   updateUser: (userId, data) => API.put(`/admin/users/${userId}`, data),
-  adjustUserBalance: (userId, amount) => API.post(`/admin/users/${userId}/adjust-balance`, { amount }),
-  setUserStatus: (userId, status) => API.post(`/admin/users/${userId}/status`, { status }),
+  adjustUserBalance: (userId, amount, totpCode = '') => API.post(
+    `/admin/users/${userId}/adjust-balance`,
+    { amount },
+    totpCode ? { headers: { 'X-TOTP-Code': totpCode } } : undefined,
+  ),
+  setUserStatus: (userId, status, totpCode = '') => API.post(
+    `/admin/users/${userId}/status`,
+    { status },
+    totpCode ? { headers: { 'X-TOTP-Code': totpCode } } : undefined,
+  ),
+
+  // Admin Roles
+  listAdminRoles: () => API.get('/admin/users/admin-roles'),
+  setAdminRole: (userId, role, totpCode = '') => API.post(
+    `/admin/users/${userId}/admin-role`,
+    { role },
+    totpCode ? { headers: { 'X-TOTP-Code': totpCode } } : undefined,
+  ),
 
   // Channels
   listChannels: (params) => API.get('/admin/channels', { params }),

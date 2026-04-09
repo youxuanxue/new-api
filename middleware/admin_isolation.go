@@ -8,6 +8,7 @@ package middleware
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
+	ttmodel "github.com/QuantumNous/new-api/model"
 )
 
 // AdminRole 管理员角色
@@ -37,53 +39,99 @@ type AdminUser struct {
 	IsActive  bool
 }
 
-// 敏感操作定义
+// sensitiveOperations are logged to the audit trail (file + DB).
 var sensitiveOperations = map[string]bool{
-	"PUT /admin/users":       true,
-	"DELETE /admin/users":    true,
-	"POST /admin/pricing":    true,
-	"PUT /admin/pricing":     true,
-	"DELETE /admin/channels": true,
-	"PUT /admin/channels":    true,
-	"POST /admin/users/balance": true,
+	"PUT /admin/users":                 true,
+	"DELETE /admin/users":              true,
+	"POST /admin/users/adjust-balance": true,
+	"POST /admin/users/status":         true,
+	"POST /admin/users/admin-role":     true,
+	"POST /admin/channels":             true,
+	"PUT /admin/channels":              true,
+	"DELETE /admin/channels":           true,
+	"POST /admin/pricing":              true,
+	"PUT /admin/pricing":               true,
+	"POST /admin/plans":                true,
+	"PUT /admin/plans":                 true,
+	"POST /admin/pool/accounts":        true,
+	"DELETE /admin/pool/accounts":      true,
+	"PUT /admin/settings":              true,
+	"POST /admin/webhooks":             true,
+	"PUT /admin/webhooks":              true,
+	"DELETE /admin/webhooks":           true,
 }
 
-// 关键操作定义（需要二次验证）
+// criticalOperations require a valid X-TOTP-Code header (2FA).
 var criticalOperations = map[string]bool{
-	"PUT /admin/pricing":          true,
-	"POST /admin/users/balance":   true,
-	"DELETE /admin/channels":      true,
-	"PUT /admin/users/status":     true,
+	"POST /admin/users/adjust-balance": true,
+	"POST /admin/users/status":         true,
+	"POST /admin/users/admin-role":     true,
+	"POST /admin/pricing":              true,
+	"PUT /admin/pricing":               true,
+	"DELETE /admin/channels":           true,
+	"DELETE /admin/pool/accounts":      true,
+	"PUT /admin/settings":              true,
 }
 
-// 操作权限映射
+// operationPermissions maps "METHOD /normalized/path" to the minimum
+// AdminRole required.  Any route NOT listed here defaults to super_admin
+// (deny-by-default).  The path is post-normalizeAdminPath (ID segments stripped).
 var operationPermissions = map[string]AdminRole{
-	// 用户管理
-	"GET /admin/users":    RoleViewer,
-	"PUT /admin/users":    RoleOperator,
-	"DELETE /admin/users": RoleSuperAdmin,
+	// Dashboard
+	"GET /admin/dashboard": RoleViewer,
 
-	// 渠道管理
+	// Users
+	"GET /admin/users":                 RoleViewer,
+	"PUT /admin/users":                 RoleOperator,
+	"DELETE /admin/users":              RoleSuperAdmin,
+	"POST /admin/users/adjust-balance": RoleSuperAdmin,
+	"POST /admin/users/status":         RoleOperator,
+	"POST /admin/users/admin-role":     RoleSuperAdmin,
+	"GET /admin/users/admin-roles":     RoleSuperAdmin,
+
+	// Channels
 	"GET /admin/channels":    RoleViewer,
 	"POST /admin/channels":   RoleOperator,
 	"PUT /admin/channels":    RoleOperator,
 	"DELETE /admin/channels": RoleSuperAdmin,
+	"POST /admin/channels/test": RoleOperator,
 
-	// 定价管理
+	// Pool
+	"GET /admin/pool":                    RoleViewer,
+	"GET /admin/pool/accounts":           RoleViewer,
+	"POST /admin/pool/accounts":          RoleOperator,
+	"DELETE /admin/pool/accounts":        RoleSuperAdmin,
+	"POST /admin/pool/accounts/refresh":  RoleOperator,
+
+	// Pricing
 	"GET /admin/pricing":  RoleViewer,
 	"POST /admin/pricing": RoleSuperAdmin,
 	"PUT /admin/pricing":  RoleSuperAdmin,
 
-	// 财务管理
-	"GET /admin/finance":      RoleSuperAdmin,
-	"POST /admin/users/balance": RoleSuperAdmin,
+	// Plans
+	"GET /admin/plans":  RoleViewer,
+	"POST /admin/plans": RoleSuperAdmin,
+	"PUT /admin/plans":  RoleSuperAdmin,
 
-	// 系统设置
-	"GET /admin/settings":  RoleOperator,
-	"PUT /admin/settings":  RoleSuperAdmin,
+	// Finance
+	"GET /admin/finance/overview": RoleSuperAdmin,
+	"GET /admin/finance/revenue":  RoleSuperAdmin,
+	"GET /admin/finance/costs":    RoleSuperAdmin,
+	"GET /admin/finance/payments": RoleSuperAdmin,
 
-	// 审计日志
+	// Audit
 	"GET /admin/audit": RoleSuperAdmin,
+
+	// Settings
+	"GET /admin/settings": RoleOperator,
+	"PUT /admin/settings": RoleSuperAdmin,
+
+	// Webhooks
+	"GET /admin/webhooks":     RoleViewer,
+	"POST /admin/webhooks":    RoleOperator,
+	"PUT /admin/webhooks":     RoleOperator,
+	"DELETE /admin/webhooks":  RoleSuperAdmin,
+	"POST /admin/webhooks/test": RoleOperator,
 }
 
 // AdminAuditLog 管理员审计日志
@@ -98,7 +146,7 @@ type AdminAuditLog struct {
 	NewValue    string    `json:"new_value,omitempty"`
 	IP          string    `json:"ip"`
 	UserAgent   string    `json:"user_agent"`
-	TOTPVefified bool     `json:"totp_verified"`
+	TOTPVerified bool     `json:"totp_verified"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -137,8 +185,8 @@ func AdminIsolation() gin.HandlerFunc {
 			return
 		}
 
-		// 2. 检查操作权限
-		opKey := c.Request.Method + " " + path
+		// 2. 检查操作权限（normalize path to strip param segments like :id)
+		opKey := c.Request.Method + " " + normalizeAdminPath(path)
 		if !checkPermission(admin.Role, opKey) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error":      "permission denied",
@@ -171,11 +219,52 @@ func AdminIsolation() gin.HandlerFunc {
 
 		// 4. 敏感操作审计
 		if sensitiveOperations[opKey] {
-			go recordAdminAudit(c, admin, opKey)
+			audit := buildAdminAudit(c, admin, opKey)
+			go writeAdminAuditLog(audit)
 		}
 
 		c.Next()
 	}
+}
+
+// normalizeAdminPath strips numeric/UUID ID segments from the path so that
+// /admin/users/123 becomes /admin/users and /admin/channels/42/test becomes
+// /admin/channels/test. This allows exact-match permission lookups.
+func normalizeAdminPath(path string) string {
+	parts := strings.Split(strings.TrimSuffix(path, "/"), "/")
+	var normalized []string
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		if isIDSegment(p) {
+			continue
+		}
+		normalized = append(normalized, p)
+	}
+	return "/" + strings.Join(normalized, "/")
+}
+
+func isIDSegment(s string) bool {
+	if s == "" {
+		return false
+	}
+	// UUID-like IDs: 8-4-4-4-12 hex groups
+	if len(s) == 36 && strings.Count(s, "-") == 4 {
+		for _, c := range s {
+			if (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || c == '-' {
+				continue
+			}
+			return false
+		}
+		return true
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // CheckPermission reports whether role may perform operation (exported for tests).
@@ -230,17 +319,17 @@ func verifyTOTP(secret, code string) bool {
 	return valid
 }
 
-// recordAdminAudit 记录管理员审计日志
-func recordAdminAudit(c *gin.Context, admin *AdminUser, operation string) {
+// buildAdminAudit captures audit fields from request context synchronously.
+func buildAdminAudit(c *gin.Context, admin *AdminUser, operation string) AdminAuditLog {
 	audit := AdminAuditLog{
-		AdminID:     admin.ID,
-		AdminName:   admin.Username,
-		Operation:   operation,
-		TargetID:    c.Param("id"),
-		IP:          c.ClientIP(),
-		UserAgent:   c.GetHeader("User-Agent"),
-		TOTPVefified: c.GetBool("totp_verified"),
-		CreatedAt:   time.Now(),
+		AdminID:      admin.ID,
+		AdminName:    admin.Username,
+		Operation:    operation,
+		TargetID:     c.Param("id"),
+		IP:           c.ClientIP(),
+		UserAgent:    c.GetHeader("User-Agent"),
+		TOTPVerified: c.GetBool("totp_verified"),
+		CreatedAt:    time.Now(),
 	}
 
 	// 提取目标类型
@@ -257,8 +346,7 @@ func recordAdminAudit(c *gin.Context, admin *AdminUser, operation string) {
 		audit.NewValue = fmt.Sprintf("%v", newValue)
 	}
 
-	// 写入审计日志
-	writeAdminAuditLog(audit)
+	return audit
 }
 
 // writeAdminAuditLog 写入管理员审计日志
@@ -276,13 +364,30 @@ func writeAdminAuditLog(audit AdminAuditLog) {
 			audit.TargetType,
 			audit.TargetID,
 			audit.IP,
-			audit.TOTPVefified,
+			audit.TOTPVerified,
 		)
 		adminAuditFile.WriteString(line)
 	}
 
-	// 同时写入数据库（需要在 New-API 中实现）
-	// database.DB.Create(&audit)
+	// 同步持久化到 DB，确保容器重启后可追溯。
+	if ttmodel.DB != nil {
+		dbAudit := ttmodel.AdminAuditLog{
+			AdminId:      audit.AdminID,
+			AdminName:    audit.AdminName,
+			Operation:    audit.Operation,
+			TargetId:     audit.TargetID,
+			TargetType:   audit.TargetType,
+			OldValue:     audit.OldValue,
+			NewValue:     audit.NewValue,
+			IP:           audit.IP,
+			UserAgent:    audit.UserAgent,
+			TOTPVerified: audit.TOTPVerified,
+			CreatedAt:    audit.CreatedAt,
+		}
+		if err := ttmodel.DB.Create(&dbAudit).Error; err != nil {
+			log.Printf("[WARN] failed to persist admin audit log: %v", err)
+		}
+	}
 }
 
 // AdminOnly 仅管理员可访问
@@ -323,38 +428,47 @@ func SuperAdminOnly() gin.HandlerFunc {
 
 // IPWhitelist IP 白名单中间件
 func IPWhitelist(allowedIPs []string) gin.HandlerFunc {
-	allowedSet := make(map[string]bool)
-	for _, ip := range allowedIPs {
-		allowedSet[ip] = true
+	exactIPs := make(map[string]bool)
+	var cidrNets []*net.IPNet
+
+	for _, entry := range allowedIPs {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if strings.Contains(entry, "/") {
+			_, ipNet, err := net.ParseCIDR(entry)
+			if err != nil {
+				log.Printf("[WARN] invalid CIDR in IP whitelist: %s: %v", entry, err)
+				continue
+			}
+			cidrNets = append(cidrNets, ipNet)
+		} else {
+			exactIPs[entry] = true
+		}
 	}
 
 	return func(c *gin.Context) {
 		clientIP := c.ClientIP()
 
-		// 检查是否在白名单中
-		if !allowedSet[clientIP] {
-			// 检查是否是 CIDR 格式
-			allowed := false
-			for _, allowedIP := range allowedIPs {
-				if strings.Contains(allowedIP, "/") {
-					// CIDR 检查需要额外实现
-					// 简化版：直接字符串匹配
-					if strings.HasPrefix(clientIP, strings.Split(allowedIP, "/")[0][:strings.LastIndex(strings.Split(allowedIP, "/")[0], ".")]) {
-						allowed = true
-						break
-					}
-				}
-			}
+		if exactIPs[clientIP] {
+			c.Next()
+			return
+		}
 
-			if !allowed {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"error": "IP not in whitelist",
-				})
-				return
+		ip := net.ParseIP(clientIP)
+		if ip != nil {
+			for _, cidr := range cidrNets {
+				if cidr.Contains(ip) {
+					c.Next()
+					return
+				}
 			}
 		}
 
-		c.Next()
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+			"error": "IP not in whitelist",
+		})
 	}
 }
 

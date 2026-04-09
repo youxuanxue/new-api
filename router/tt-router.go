@@ -108,6 +108,7 @@ func SetTTApiRouter(router *gin.Engine) {
 		playgroundRouter.POST("/run/single", controller.RunPlaygroundSingle)
 		playgroundRouter.POST("/run/stream", controller.RunPlaygroundStream)
 		playgroundRouter.GET("/history", controller.GetPlaygroundHistory)
+		playgroundRouter.POST("/history", controller.SavePlaygroundHistory)
 	}
 
 	// 企业 SSO 路由（V2.0功能）
@@ -164,6 +165,7 @@ func SetTTAdminRouter(router *gin.Engine) {
 	adminRouter.Use(middleware.AdminAuth())
 	adminRouter.Use(middleware.AdminAuthBridge())
 	adminRouter.Use(middleware.AdminIsolation())
+	adminRouter.Use(middleware.AuditLogMiddleware())
 	{
 		// 运营看板
 		adminRouter.GET("/dashboard", controller.GetAdminDashboard)
@@ -174,6 +176,8 @@ func SetTTAdminRouter(router *gin.Engine) {
 		adminRouter.PUT("/users/:id", controller.UpdateUser)
 		adminRouter.POST("/users/:id/adjust-balance", controller.AdjustUserBalance)
 		adminRouter.POST("/users/:id/status", controller.SetUserStatus)
+		adminRouter.POST("/users/:id/admin-role", controller.SetAdminRole)
+		adminRouter.GET("/users/admin-roles", controller.ListAdminRoles)
 
 		// 渠道管理
 		adminRouter.GET("/channels", controller.ListChannels)

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
 	"sync"
@@ -66,6 +67,63 @@ func NewSub2APIClient(baseURL, apiKey string) *Sub2APIClient {
 	}
 }
 
+// doWithRetry executes an HTTP request with exponential backoff retry for
+// transient failures (network errors or 5xx responses).
+func (c *Sub2APIClient) doWithRetry(req *http.Request) (*http.Response, error) {
+	maxRetries := GetPoolSyncConfig().MaxRetryCount
+	if maxRetries <= 0 {
+		maxRetries = 1
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(1<<uint(attempt-1)) * time.Second
+			jitterRange := backoff / 2
+			if jitterRange <= 0 {
+				jitterRange = time.Second
+			}
+			jitter := time.Duration(rand.Int63n(int64(jitterRange)))
+			wait := backoff + jitter
+			select {
+			case <-time.After(wait):
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			}
+		}
+
+		// Reset body before retry to avoid sending an empty payload on subsequent attempts.
+		if attempt > 0 && req.Body != nil {
+			if req.GetBody == nil {
+				return nil, fmt.Errorf("sub2api request body is not replayable for retry: method=%s", req.Method)
+			}
+			body, err := req.GetBody()
+			if err != nil {
+				return nil, fmt.Errorf("sub2api failed to reset request body: %w", err)
+			}
+			req.Body = body
+		}
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			lastErr = err
+			logger.LogError(nil, fmt.Sprintf("[Sub2API] request failed (attempt %d/%d): %v", attempt+1, maxRetries, err))
+			continue
+		}
+
+		if resp.StatusCode >= 500 {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			lastErr = fmt.Errorf("sub2api 5xx: status=%d body=%s", resp.StatusCode, string(body))
+			logger.LogError(nil, fmt.Sprintf("[Sub2API] server error (attempt %d/%d): %v", attempt+1, maxRetries, lastErr))
+			continue
+		}
+
+		return resp, nil
+	}
+	return nil, fmt.Errorf("sub2api request failed after %d attempts: %w", maxRetries, lastErr)
+}
+
 // BaseURL returns the configured Sub2API base URL (trimmed, no trailing slash).
 func (c *Sub2APIClient) BaseURL() string { return c.baseURL }
 
@@ -114,7 +172,7 @@ func (c *Sub2APIClient) ListAccounts(ctx context.Context) ([]AccountInfo, error)
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := c.client.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +196,7 @@ func (c *Sub2APIClient) GetAccount(ctx context.Context, email string) (*AccountI
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
-	resp, err := c.client.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +221,7 @@ func (c *Sub2APIClient) RefreshToken(ctx context.Context, email string) (*Refres
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
-	resp, err := c.client.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +247,7 @@ func (c *Sub2APIClient) CheckBanStatus(ctx context.Context, email string) (*BanS
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
-	resp, err := c.client.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +274,7 @@ func (c *Sub2APIClient) BatchCheckBan(ctx context.Context, emails []string) ([]B
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	resp, err := c.client.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +314,7 @@ func (c *Sub2APIClient) AddAccount(ctx context.Context, email, password, proxyUR
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.client.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return err
 	}
@@ -273,7 +331,7 @@ func (c *Sub2APIClient) RemoveAccount(ctx context.Context, email string) error {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	resp, err := c.client.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return err
 	}
@@ -291,7 +349,7 @@ func (c *Sub2APIClient) GetPoolHealth(ctx context.Context) (map[string]interface
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
-	resp, err := c.client.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, err
 	}
@@ -307,6 +365,10 @@ func (c *Sub2APIClient) GetPoolHealth(ctx context.Context) (map[string]interface
 }
 
 func StartPoolSyncTask() {
+	StartPoolSyncTaskWithContext(context.Background())
+}
+
+func StartPoolSyncTaskWithContext(ctx context.Context) {
 	logger.LogInfo(nil, "[Sub2API] Starting pool sync task...")
 	interval := GetPoolSyncConfig().SyncInterval
 	if interval <= 0 {
@@ -314,9 +376,21 @@ func StartPoolSyncTask() {
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	runPoolSyncOnce()
-	for range ticker.C {
+	select {
+	case <-ctx.Done():
+		logger.LogInfo(nil, "[Sub2API] Pool sync task stopped before initial run")
+		return
+	default:
 		runPoolSyncOnce()
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			logger.LogInfo(nil, "[Sub2API] Pool sync task stopped")
+			return
+		case <-ticker.C:
+			runPoolSyncOnce()
+		}
 	}
 }
 
@@ -332,7 +406,19 @@ func runPoolSyncOnce() {
 	result, err := SyncPoolAccounts(ctx, client)
 	if err != nil {
 		logger.LogError(nil, fmt.Sprintf("[Sub2API] Pool sync failed: %v", err))
+		common.SendFeishuAlert(
+			"Pool sync failed",
+			fmt.Sprintf("sub2api account sync failed: %v", err),
+			common.AlertCritical,
+		)
 		return
 	}
 	logger.LogInfo(nil, fmt.Sprintf("[Sub2API] Pool sync completed: added=%d, updated=%d, removed=%d, errors=%d", result.Added, result.Updated, result.Removed, result.Errors))
+	if result.Errors > 0 {
+		common.SendFeishuAlert(
+			"Pool sync partial errors",
+			fmt.Sprintf("sub2api sync completed with %d item errors", result.Errors),
+			common.AlertWarning,
+		)
+	}
 }

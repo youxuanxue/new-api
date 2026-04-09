@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 
+	"github.com/QuantumNous/new-api/common"
+	ttmodel "github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 )
 
@@ -43,23 +45,74 @@ func AdminAuthBridge() gin.HandlerFunc {
 			return
 		}
 
+		adminID, ok := toInt(id)
+		if !ok || adminID <= 0 {
+			c.Next()
+			return
+		}
+		usernameStr, ok := username.(string)
+		if !ok || usernameStr == "" {
+			c.Next()
+			return
+		}
+		roleInt, ok := toInt(roleVal)
+		if !ok {
+			c.Next()
+			return
+		}
+
+		// Root users (role=100) are always super_admin.
+		// Admin users (role=10) get their TT role from UserExtension.AdminRole.
 		var adminRole AdminRole
-		switch roleVal.(int) {
-		case 100:
+		if roleInt >= common.RoleRootUser {
 			adminRole = RoleSuperAdmin
-		case 10:
-			adminRole = RoleOperator
-		default:
-			adminRole = RoleViewer
+		} else {
+			stored := ttmodel.GetTTAdminRole(adminID)
+			adminRole = AdminRole(stored)
+		}
+
+		user, err := ttmodel.GetUserById(adminID, false)
+		if err != nil || user == nil {
+			c.Next()
+			return
+		}
+
+		var totpSecret string
+		twoFA, err := ttmodel.GetTwoFAByUserId(adminID)
+		if err == nil && twoFA != nil && twoFA.IsEnabled {
+			totpSecret = twoFA.Secret
 		}
 
 		admin := &AdminUser{
-			ID:       uint(id.(int)),
-			Username: username.(string),
-			Role:     adminRole,
-			IsActive: true,
+			ID:         uint(adminID),
+			Username:   usernameStr,
+			Role:       adminRole,
+			TOTPSecret: totpSecret,
+			IsActive:   user.Status == common.UserStatusEnabled,
 		}
 		c.Set("admin_user", admin)
+		c.Set("admin_id", adminID)
 		c.Next()
+	}
+}
+
+func toInt(v interface{}) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case int32:
+		return int(n), true
+	case int64:
+		return int(n), true
+	case uint:
+		return int(n), true
+	case uint32:
+		return int(n), true
+	case uint64:
+		return int(n), true
+	case float64:
+		return int(n), true
+	default:
+		return 0, false
 	}
 }

@@ -255,7 +255,7 @@ func migrateDB() error {
 		return err
 	}
 
-	err := DB.AutoMigrate(
+	baseModels := []interface{}{
 		&Channel{},
 		&Token{},
 		&User{},
@@ -280,7 +280,8 @@ func migrateDB() error {
 		&SubscriptionPreConsumeRecord{},
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
-	)
+	}
+	err := DB.AutoMigrate(append(baseModels, getTTAutoMigrateModels()...)...)
 	if err != nil {
 		return err
 	}
@@ -300,34 +301,45 @@ func migrateDBFast() error {
 
 	var wg sync.WaitGroup
 
-	migrations := []struct {
+	models := append([]interface{}{
+		&Channel{},
+		&Token{},
+		&User{},
+		&PasskeyCredential{},
+		&Option{},
+		&Redemption{},
+		&Ability{},
+		&Log{},
+		&Midjourney{},
+		&TopUp{},
+		&QuotaData{},
+		&Task{},
+		&Model{},
+		&Vendor{},
+		&PrefillGroup{},
+		&Setup{},
+		&TwoFA{},
+		&TwoFABackupCode{},
+		&Checkin{},
+		&SubscriptionOrder{},
+		&UserSubscription{},
+		&SubscriptionPreConsumeRecord{},
+		&CustomOAuthProvider{},
+		&UserOAuthBinding{},
+	}, getTTAutoMigrateModels()...)
+
+	migrations := make([]struct {
 		model interface{}
 		name  string
-	}{
-		{&Channel{}, "Channel"},
-		{&Token{}, "Token"},
-		{&User{}, "User"},
-		{&PasskeyCredential{}, "PasskeyCredential"},
-		{&Option{}, "Option"},
-		{&Redemption{}, "Redemption"},
-		{&Ability{}, "Ability"},
-		{&Log{}, "Log"},
-		{&Midjourney{}, "Midjourney"},
-		{&TopUp{}, "TopUp"},
-		{&QuotaData{}, "QuotaData"},
-		{&Task{}, "Task"},
-		{&Model{}, "Model"},
-		{&Vendor{}, "Vendor"},
-		{&PrefillGroup{}, "PrefillGroup"},
-		{&Setup{}, "Setup"},
-		{&TwoFA{}, "TwoFA"},
-		{&TwoFABackupCode{}, "TwoFABackupCode"},
-		{&Checkin{}, "Checkin"},
-		{&SubscriptionOrder{}, "SubscriptionOrder"},
-		{&UserSubscription{}, "UserSubscription"},
-		{&SubscriptionPreConsumeRecord{}, "SubscriptionPreConsumeRecord"},
-		{&CustomOAuthProvider{}, "CustomOAuthProvider"},
-		{&UserOAuthBinding{}, "UserOAuthBinding"},
+	}, 0, len(models))
+	for _, m := range models {
+		migrations = append(migrations, struct {
+			model interface{}
+			name  string
+		}{
+			model: m,
+			name:  fmt.Sprintf("%T", m),
+		})
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))

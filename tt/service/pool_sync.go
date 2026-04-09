@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	ttmodel "github.com/QuantumNous/new-api/model"
 	"github.com/shopspring/decimal"
@@ -249,12 +250,21 @@ func GetPoolStatistics() map[string]interface{} {
 }
 
 func StartBanDetectionTask() {
+	StartBanDetectionTaskWithContext(context.Background())
+}
+
+func StartBanDetectionTaskWithContext(ctx context.Context) {
 	logger.LogInfo(nil, "[BanDetect] Starting ban detection task...")
 	config := GetPoolSyncConfig()
 	ticker := time.NewTicker(config.BanCheckInterval)
 	defer ticker.Stop()
-	for range ticker.C {
-		func() {
+	for {
+		select {
+		case <-ctx.Done():
+			logger.LogInfo(nil, "[BanDetect] Ban detection task stopped")
+			return
+		case <-ticker.C:
+			func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 			sub2apiConfig := GetSub2APIConfig()
@@ -262,8 +272,28 @@ func StartBanDetectionTask() {
 				return
 			}
 			client := NewSub2APIClient(sub2apiConfig.BaseURL, sub2apiConfig.APIKey)
-			_, _ = DetectBannedAccounts(ctx, client)
-			_, _ = ReleaseAccountCooldown()
+			banned, err := DetectBannedAccounts(ctx, client)
+			if err != nil {
+				logger.LogError(nil, fmt.Sprintf("[BanDetect] Detect banned accounts failed: %v", err))
+				common.SendFeishuAlert(
+					"Pool ban detection failed",
+					fmt.Sprintf("ban detection error: %v", err),
+					common.AlertWarning,
+				)
+			} else if len(banned) > 0 {
+				common.SendFeishuAlert(
+					"Pool accounts banned",
+					fmt.Sprintf("%d pool accounts moved to banned state", len(banned)),
+					common.AlertWarning,
+				)
+			}
+			released, releaseErr := ReleaseAccountCooldown()
+			if releaseErr != nil {
+				logger.LogError(nil, fmt.Sprintf("[BanDetect] Release cooldown failed: %v", releaseErr))
+			} else if released > 0 {
+				logger.LogInfo(nil, fmt.Sprintf("[BanDetect] Released %d cooldown accounts", released))
+			}
 		}()
+		}
 	}
 }

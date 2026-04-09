@@ -5,7 +5,6 @@ package controller
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -108,7 +107,7 @@ func callModelAPI(c *gin.Context, modelName string, messages []dto.Message, maxT
 	upstreamURL := fmt.Sprintf("%s/v1/chat/completions", strings.TrimSuffix(baseURL, "/"))
 
 	// 序列化请求体
-	reqBody, err := json.Marshal(req)
+	reqBody, err := common.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
@@ -128,7 +127,7 @@ func callModelAPI(c *gin.Context, modelName string, messages []dto.Message, maxT
 	proxy := ""
 	if channel.Setting != nil && *channel.Setting != "" {
 		var channelSettings dto.ChannelSettings
-		if err := json.Unmarshal([]byte(*channel.Setting), &channelSettings); err == nil {
+		if err := common.UnmarshalJsonStr(*channel.Setting, &channelSettings); err == nil {
 			proxy = channelSettings.Proxy
 		}
 	}
@@ -159,7 +158,7 @@ func callModelAPI(c *gin.Context, modelName string, messages []dto.Message, maxT
 
 	// 解析 OpenAI 响应
 	var openaiResp dto.OpenAITextResponse
-	if err := json.Unmarshal(respBody, &openaiResp); err != nil {
+	if err := common.Unmarshal(respBody, &openaiResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
@@ -360,7 +359,7 @@ func RunPlaygroundStream(c *gin.Context) {
 		reqBody["temperature"] = *req.Temperature
 	}
 
-	bodyBytes, err := json.Marshal(reqBody)
+	bodyBytes, err := common.Marshal(reqBody)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to marshal request"})
 		return
@@ -382,7 +381,7 @@ func RunPlaygroundStream(c *gin.Context) {
 	proxy := ""
 	if channel.Setting != nil && *channel.Setting != "" {
 		var channelSettings dto.ChannelSettings
-		if err := json.Unmarshal([]byte(*channel.Setting), &channelSettings); err == nil {
+		if err := common.UnmarshalJsonStr(*channel.Setting, &channelSettings); err == nil {
 			proxy = channelSettings.Proxy
 		}
 	}
@@ -561,7 +560,7 @@ func GetPlaygroundHistory(c *gin.Context) {
 	result := make([]PlaygroundHistory, len(histories))
 	for i, h := range histories {
 		var models []string
-		json.Unmarshal([]byte(h.Models), &models)
+		_ = common.UnmarshalJsonStr(h.Models, &models)
 		result[i] = PlaygroundHistory{
 			Id:        fmt.Sprintf("%d", h.Id),
 			UserId:    h.UserId,
@@ -581,6 +580,8 @@ type SavePlaygroundHistoryRequest struct {
 	Result PlaygroundResult `json:"result"`
 }
 
+const maxPlaygroundHistoryBodyBytes = 1 << 20 // 1 MiB
+
 // SavePlaygroundHistory 保存 Playground 历史记录到数据库
 func SavePlaygroundHistory(c *gin.Context) {
 	userId := c.GetInt("id")
@@ -589,6 +590,7 @@ func SavePlaygroundHistory(c *gin.Context) {
 		return
 	}
 
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxPlaygroundHistoryBodyBytes)
 	var req SavePlaygroundHistoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -596,8 +598,16 @@ func SavePlaygroundHistory(c *gin.Context) {
 	}
 
 	// 构建历史记录
-	modelsJson, _ := json.Marshal(req.Models)
-	responseJson, _ := json.Marshal(req.Result)
+	modelsJson, err := common.Marshal(req.Models)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid models payload"})
+		return
+	}
+	responseJson, err := common.Marshal(req.Result)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid result payload"})
+		return
+	}
 
 	history := &ttmodel.PlaygroundHistory{
 		UserId:   uint(userId),
@@ -608,7 +618,7 @@ func SavePlaygroundHistory(c *gin.Context) {
 	}
 
 	// 保存到数据库
-	err := ttmodel.CreatePlaygroundHistory(history)
+	err = ttmodel.CreatePlaygroundHistory(history)
 	if err != nil {
 		logger.LogError(c, "Failed to save playground history: "+err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save history"})

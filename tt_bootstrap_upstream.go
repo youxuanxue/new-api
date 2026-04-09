@@ -4,3 +4,5 @@
 package main
 
 func startTTBootstrapTasks() {}
+
+func stopTTBootstrapTasks() {}

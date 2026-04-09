@@ -2,13 +2,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -193,10 +196,29 @@ func main() {
 	// Log startup success message
 	common.LogStartupSuccess(startTime, port)
 
-	err = server.Run(":" + port)
-	if err != nil {
-		common.FatalLog("failed to start HTTP server: " + err.Error())
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: server,
 	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			common.FatalLog("failed to start HTTP server: " + err.Error())
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-quit
+	common.SysLog(fmt.Sprintf("received signal %v, shutting down with %v drain...", sig, common.GracefulShutdownDrain))
+	stopTTBootstrapTasks()
+
+	ctx, cancel := context.WithTimeout(context.Background(), common.GracefulShutdownDrain)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		common.SysError("server forced to shutdown: " + err.Error())
+	}
+	common.SysLog("server exited")
 }
 
 func InjectUmamiAnalytics() {

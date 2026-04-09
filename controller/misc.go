@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -46,7 +47,17 @@ func HealthCheck(c *gin.Context) {
 	if !healthy {
 		status = http.StatusServiceUnavailable
 	}
-	c.JSON(status, gin.H{"status": checks})
+	uptimeSeconds := time.Now().Unix() - common.StartTime
+	if uptimeSeconds < 0 {
+		uptimeSeconds = 0
+	}
+	c.JSON(status, gin.H{
+		"ok":             healthy,
+		"version":        common.Version,
+		"start_time":     common.StartTime,
+		"uptime_seconds": uptimeSeconds,
+		"status":         checks,
+	})
 }
 
 func TestStatus(c *gin.Context) {

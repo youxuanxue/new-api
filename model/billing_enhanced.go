@@ -31,6 +31,9 @@ type UserExtension struct {
 	CurrentPlanId  *uint `json:"current_plan_id"`
 	SubscriptionId *uint `json:"subscription_id"`
 
+	// TT 管理角色（super_admin / operator / viewer），仅对 users.role>=10 生效
+	AdminRole string `json:"admin_role,omitempty" gorm:"size:20;default:''"`
+
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
@@ -253,25 +256,7 @@ const (
 	RoleViewer     AdminRole = "viewer"
 )
 
-// Admin 管理员表
-type Admin struct {
-	Id           uint      `json:"id" gorm:"primaryKey"`
-	Username     string    `json:"username" gorm:"uniqueIndex;size:64;not null"`
-	Email        string    `json:"email" gorm:"uniqueIndex;size:128;not null"`
-	PasswordHash string    `json:"-" gorm:"size:128;not null"`
-	Role         AdminRole `json:"role" gorm:"size:20;default:'operator'"`
-	TOTPSecret   string    `json:"-" gorm:"size:64"`
-	IsActive     bool      `json:"is_active" gorm:"default:true"`
-
-	CreatedAt   time.Time  `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt   time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
-	LastLoginAt *time.Time `json:"last_login_at"`
-}
-
-// TableName 指定表名
-func (Admin) TableName() string {
-	return "admins"
-}
+// Admin struct has been moved to model/admin_legacy.go
 
 // AdminAuditLog 管理员审计日志
 type AdminAuditLog struct {

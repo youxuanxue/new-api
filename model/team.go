@@ -282,3 +282,14 @@ func RevokeTeamAPIKey(keyId uint) error {
 	return DB.Model(&TeamAPIKey{}).Where("id = ?", keyId).
 		Update("status", "revoked").Error
 }
+
+// GetTeamAPIKeyRateLimit returns the rate limit (requests/min) for the given
+// team API key string, or 0 if the key is not found or not active.
+func GetTeamAPIKeyRateLimit(apiKey string) int {
+	var key TeamAPIKey
+	err := DB.Select("rate_limit").Where("key = ? AND status = ?", apiKey, "active").First(&key).Error
+	if err != nil {
+		return 0
+	}
+	return key.RateLimit
+}

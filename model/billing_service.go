@@ -478,7 +478,8 @@ func GetDashboardData() (*DashboardData, error) {
 
 	// 用户统计
 	DB.Model(&User{}).Count(&data.TotalUsers)
-	DB.Model(&User{}).Where("updated_at >= ?", today).Count(&data.ActiveUsers)
+	DB.Model(&ConsumptionRecord{}).Where("created_at >= ?", today).
+		Distinct("user_id").Count(&data.ActiveUsers)
 
 	// 趋势数据（最近7天）
 	for i := 6; i >= 0; i-- {
@@ -506,6 +507,8 @@ type UserForAdmin struct {
 	Id           uint   `json:"id"`
 	Username     string `json:"username"`
 	Email        string `json:"email"`
+	Role         int    `json:"role"`
+	AdminRole    string `json:"admin_role,omitempty"`
 	Balance      string `json:"balance"`
 	TotalUsed    string `json:"total_used"`
 	Status       string `json:"status"`
@@ -534,17 +537,45 @@ func ListUsersForAdmin(page, pageSize, search, status string) ([]UserForAdmin, i
 		return nil, 0, err
 	}
 
+	adminUserIDs := make([]int, 0)
+	for _, u := range users {
+		if u.Role >= common.RoleAdminUser {
+			adminUserIDs = append(adminUserIDs, u.Id)
+		}
+	}
+	adminRoles := make(map[int]string)
+	if len(adminUserIDs) > 0 {
+		var exts []UserExtension
+		DB.Where("user_id IN ?", adminUserIDs).Select("user_id, admin_role").Find(&exts)
+		for _, ext := range exts {
+			if ext.AdminRole != "" {
+				adminRoles[int(ext.UserId)] = ext.AdminRole
+			}
+		}
+	}
+
 	result := make([]UserForAdmin, len(users))
 	for i, u := range users {
-		result[i] = UserForAdmin{
+		r := UserForAdmin{
 			Id:        uint(u.Id),
 			Username:  u.Username,
 			Email:     u.Email,
+			Role:      u.Role,
 			Balance:   decimal.NewFromInt(int64(u.Quota)).Div(decimal.NewFromInt(500000)).StringFixed(2),
 			TotalUsed: decimal.NewFromInt(int64(u.UsedQuota)).Div(decimal.NewFromInt(500000)).StringFixed(2),
 			Status:    fmt.Sprintf("%d", u.Status),
 			CreatedAt: "",
 		}
+		if u.Role >= common.RoleRootUser {
+			r.AdminRole = string(RoleSuperAdmin)
+		} else if u.Role >= common.RoleAdminUser {
+			if role, ok := adminRoles[u.Id]; ok {
+				r.AdminRole = role
+			} else {
+				r.AdminRole = string(RoleViewer)
+			}
+		}
+		result[i] = r
 	}
 
 	return result, total, nil
@@ -558,15 +589,22 @@ func GetUserDetailForAdmin(userId uint) (*UserForAdmin, error) {
 		return nil, err
 	}
 
-	return &UserForAdmin{
+	r := &UserForAdmin{
 		Id:        uint(user.Id),
 		Username:  user.Username,
 		Email:     user.Email,
+		Role:      user.Role,
 		Balance:   decimal.NewFromInt(int64(user.Quota)).Div(decimal.NewFromInt(500000)).StringFixed(2),
 		TotalUsed: decimal.NewFromInt(int64(user.UsedQuota)).Div(decimal.NewFromInt(500000)).StringFixed(2),
 		Status:    fmt.Sprintf("%d", user.Status),
 		CreatedAt: "",
-	}, nil
+	}
+	if user.Role >= common.RoleRootUser {
+		r.AdminRole = string(RoleSuperAdmin)
+	} else if user.Role >= common.RoleAdminUser {
+		r.AdminRole = GetTTAdminRole(user.Id)
+	}
+	return r, nil
 }
 
 // UpdateUserByAdmin 管理员更新用户
@@ -1358,56 +1396,7 @@ type Settings struct {
 	RegistrationOpen   bool   `json:"registration_open"`
 }
 
-// ========== 管理员管理 ==========
-
-// GetAdminById 根据ID获取管理员
-func GetAdminById(id uint) (*Admin, error) {
-	var admin Admin
-	err := DB.First(&admin, id).Error
-	if err != nil {
-		return nil, err
-	}
-	return &admin, nil
-}
-
-// GetAdminByUsername 根据用户名获取管理员
-func GetAdminByUsername(username string) (*Admin, error) {
-	var admin Admin
-	err := DB.Where("username = ?", username).First(&admin).Error
-	if err != nil {
-		return nil, err
-	}
-	return &admin, nil
-}
-
-// CreateAdmin 创建管理员
-func CreateAdmin(username, email, passwordHash string, role AdminRole) (*Admin, error) {
-	admin := Admin{
-		Username:     username,
-		Email:        email,
-		PasswordHash: passwordHash,
-		Role:         role,
-		IsActive:     true,
-	}
-	err := DB.Create(&admin).Error
-	if err != nil {
-		return nil, err
-	}
-	return &admin, nil
-}
-
-// UpdateAdminTOTP 更新管理员TOTP密钥
-func UpdateAdminTOTP(adminId uint, totpSecret string) error {
-	return DB.Model(&Admin{}).Where("id = ?", adminId).
-		Update("totp_secret", totpSecret).Error
-}
-
-// UpdateAdminLastLogin 更新管理员最后登录时间
-func UpdateAdminLastLogin(adminId uint) error {
-	now := time.Now()
-	return DB.Model(&Admin{}).Where("id = ?", adminId).
-		Update("last_login_at", now).Error
-}
+// Admin CRUD functions have been moved to model/admin_legacy.go
 
 // GetChannelByModel 根据模型名称获取渠道（用于模型验证）
 func GetChannelByModel(modelName string) (interface{}, error) {
@@ -1441,17 +1430,42 @@ func GetBudgetConfig(userId uint) (*UserBudgetConfig, error) {
 
 // SetBudgetConfig 设置用户预算配置
 func SetBudgetConfig(userId uint, dailyLimit, monthlyLimit, alertThreshold float64, notifyEmail, notifyWebhook bool) (*UserBudgetConfig, error) {
-	config := UserBudgetConfig{
-		UserId:         userId,
-		DailyLimit:     dailyLimit,
-		MonthlyLimit:   monthlyLimit,
-		AlertThreshold: alertThreshold,
-		NotifyEmail:    notifyEmail,
-		NotifyWebhook:  notifyWebhook,
+	var config UserBudgetConfig
+	err := DB.Where("user_id = ?", userId).First(&config).Error
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		// 使用 map Create：struct Create 会省略 false 布尔字段，SQLite 会落到列 default:true
+		row := map[string]interface{}{
+			"user_id":          userId,
+			"daily_limit":      dailyLimit,
+			"monthly_limit":    monthlyLimit,
+			"alert_threshold":  alertThreshold,
+			"notify_email":     notifyEmail,
+			"notify_webhook":   notifyWebhook,
+			"alert_sent":       false,
+		}
+		if err := DB.Model(&UserBudgetConfig{}).Create(row).Error; err != nil {
+			return nil, err
+		}
+		var config UserBudgetConfig
+		if err := DB.Where("user_id = ?", userId).First(&config).Error; err != nil {
+			return nil, err
+		}
+		return &config, nil
 	}
 
-	err := DB.Save(&config).Error
-	if err != nil {
+	if err := DB.Model(&config).Updates(map[string]interface{}{
+		"daily_limit":      dailyLimit,
+		"monthly_limit":    monthlyLimit,
+		"alert_threshold":  alertThreshold,
+		"notify_email":     notifyEmail,
+		"notify_webhook":   notifyWebhook,
+	}).Error; err != nil {
+		return nil, err
+	}
+	if err := DB.Where("user_id = ?", userId).First(&config).Error; err != nil {
 		return nil, err
 	}
 	return &config, nil
@@ -1666,4 +1680,66 @@ type CallLogDetail struct {
 	BalanceSource    string `json:"balance_source"`
 	Status           string `json:"status"`
 	CreatedAt        string `json:"created_at"`
+}
+
+// ========== TT Admin Role ==========
+
+var validAdminRoles = map[string]bool{
+	string(RoleSuperAdmin): true,
+	string(RoleOperator):   true,
+	string(RoleViewer):     true,
+}
+
+func IsValidAdminRole(role string) bool {
+	return validAdminRoles[role]
+}
+
+func GetTTAdminRole(userId int) string {
+	ext, err := GetUserExtension(userId)
+	if err != nil || ext.AdminRole == "" {
+		return string(RoleViewer)
+	}
+	if !validAdminRoles[ext.AdminRole] {
+		return string(RoleViewer)
+	}
+	return ext.AdminRole
+}
+
+func SetTTAdminRole(userId int, role string) error {
+	if !validAdminRoles[role] {
+		return fmt.Errorf("invalid admin role: %s", role)
+	}
+	ext, err := GetUserExtension(userId)
+	if err != nil {
+		return err
+	}
+	return DB.Model(ext).Update("admin_role", role).Error
+}
+
+func ListAdminRoleUsers() ([]AdminRoleEntry, error) {
+	var entries []AdminRoleEntry
+	rows, err := DB.Table("user_extensions ue").
+		Select("ue.user_id, ue.admin_role, u.username, u.email").
+		Joins("JOIN users u ON u.id = ue.user_id").
+		Where("ue.admin_role != '' AND ue.admin_role IS NOT NULL").
+		Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var e AdminRoleEntry
+		if err := rows.Scan(&e.UserId, &e.AdminRole, &e.Username, &e.Email); err != nil {
+			continue
+		}
+		entries = append(entries, e)
+	}
+	return entries, nil
+}
+
+type AdminRoleEntry struct {
+	UserId    uint   `json:"user_id"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	AdminRole string `json:"admin_role"`
 }

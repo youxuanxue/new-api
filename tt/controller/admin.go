@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/QuantumNous/new-api/common"
 	ttmodel "github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
@@ -213,6 +214,66 @@ func SetUserStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// ========== Admin Role 管理 ==========
+
+type SetAdminRoleRequest struct {
+	Role string `json:"role" binding:"required"` // super_admin / operator / viewer
+}
+
+func SetAdminRole(c *gin.Context) {
+	userId := c.Param("id")
+	id, err := strconv.Atoi(userId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	var req SetAdminRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	if !ttmodel.IsValidAdminRole(req.Role) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "role must be one of: super_admin, operator, viewer",
+		})
+		return
+	}
+
+	user, err := ttmodel.GetUserById(id, false)
+	if err != nil || user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	if user.Role < common.RoleAdminUser {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "target user must have admin privilege (role >= 10) before assigning TT admin role",
+		})
+		return
+	}
+
+	if err := ttmodel.SetTTAdminRole(id, req.Role); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "user_id": id, "admin_role": req.Role})
+}
+
+func ListAdminRoles(c *gin.Context) {
+	entries, err := ttmodel.ListAdminRoleUsers()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list admin roles"})
+		return
+	}
+	if entries == nil {
+		entries = []ttmodel.AdminRoleEntry{}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": entries})
 }
 
 // ========== 渠道管理 ==========

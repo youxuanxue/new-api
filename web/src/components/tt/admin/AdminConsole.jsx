@@ -14,6 +14,7 @@ import {
   IconAlertTriangle,
   IconCheckCircleStroked,
   IconPlus,
+  IconShield,
 } from '@douyinfe/semi-icons';
 import { API } from '../../../helpers/api';
 
@@ -148,7 +149,20 @@ const PoolStatusCard = ({ poolStats, onRefresh }) => {
   );
 };
 
-const UserManagementCard = ({ users, onAdjustBalance, onSetStatus, loading }) => {
+const ADMIN_ROLE_MAP = {
+  super_admin: { label: '超级管理员', color: 'red' },
+  operator:    { label: '运维',       color: 'blue' },
+  viewer:      { label: '观察者',     color: 'grey' },
+};
+
+const AdminRoleTag = ({ role, adminRole }) => {
+  if (!role || role < 10) return null;
+  const key = adminRole || 'viewer';
+  const info = ADMIN_ROLE_MAP[key] || ADMIN_ROLE_MAP.viewer;
+  return <Tag color={info.color}>{info.label}</Tag>;
+};
+
+const UserManagementCard = ({ users, onAdjustBalance, onSetStatus, onSetRole, loading }) => {
   const columns = [
     {
       title: '用户',
@@ -181,6 +195,11 @@ const UserManagementCard = ({ users, onAdjustBalance, onSetStatus, loading }) =>
       )
     },
     {
+      title: '管理角色',
+      key: 'admin_role',
+      render: (_, record) => <AdminRoleTag role={record.role} adminRole={record.admin_role} />
+    },
+    {
       title: '注册时间',
       dataIndex: 'created_at',
       key: 'created_at',
@@ -197,6 +216,11 @@ const UserManagementCard = ({ users, onAdjustBalance, onSetStatus, loading }) =>
           <Button size="small" type="tertiary" onClick={() => onSetStatus(record.id)}>
             设置状态
           </Button>
+          {record.role >= 10 && (
+            <Button size="small" type="tertiary" onClick={() => onSetRole(record.id, record.admin_role)}>
+              设置角色
+            </Button>
+          )}
         </div>
       )
     }
@@ -356,6 +380,44 @@ const AuditLogCard = ({ logs, loading }) => {
   );
 };
 
+const AdminRolesCard = ({ adminRoles, onChangeRole, loading }) => {
+  const columns = [
+    { title: 'ID', dataIndex: 'user_id', key: 'user_id', width: 60 },
+    { title: '用户名', dataIndex: 'username', key: 'username' },
+    { title: '邮箱', dataIndex: 'email', key: 'email' },
+    {
+      title: '管理角色',
+      dataIndex: 'admin_role',
+      key: 'admin_role',
+      render: (role) => {
+        const info = ADMIN_ROLE_MAP[role] || ADMIN_ROLE_MAP.viewer;
+        return <Tag color={info.color}>{info.label}</Tag>;
+      }
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      render: (_, record) => (
+        <Button size="small" type="tertiary" onClick={() => onChangeRole(record.user_id, record.admin_role)}>
+          修改角色
+        </Button>
+      )
+    }
+  ];
+
+  return (
+    <Card className="tt-card">
+      <div className="flex items-center gap-2 mb-4">
+        <IconShield size={18} style={{ color: 'var(--semi-color-primary)' }} />
+        <Text strong>管理员角色分配</Text>
+      </div>
+      <Spin spinning={loading}>
+        <Table columns={columns} dataSource={adminRoles} pagination={false} size="small" />
+      </Spin>
+    </Card>
+  );
+};
+
 const AdminConsole = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -374,15 +436,49 @@ const AdminConsole = () => {
   const [setStatusModalVisible, setSetStatusModalVisible] = useState(false);
   const [newStatus, setNewStatus] = useState('active');
 
+  const [adminRoles, setAdminRoles] = useState([]);
+  const [setRoleModalVisible, setSetRoleModalVisible] = useState(false);
+  const [newRole, setNewRole] = useState('viewer');
+
+  const is2FARequiredError = (error) => {
+    const message = error?.response?.data?.error || '';
+    const hint = error?.response?.data?.hint || '';
+    return message === '2FA required' || hint.includes('X-TOTP-Code');
+  };
+
+  const retryWithTotpIfRequired = async (requestFn, errorToast) => {
+    try {
+      return await requestFn();
+    } catch (error) {
+      if (!is2FARequiredError(error)) {
+        throw error;
+      }
+      const totpCode = window.prompt('请输入当前 2FA 验证码');
+      if (!totpCode) {
+        Toast.error('已取消 2FA 验证');
+        return null;
+      }
+      try {
+        return await requestFn({ 'X-TOTP-Code': String(totpCode).trim() });
+      } catch (retryError) {
+        if (errorToast) {
+          Toast.error(errorToast);
+        }
+        throw retryError;
+      }
+    }
+  };
+
   const fetchData = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const [dashboardRes, poolRes, usersRes, channelsRes, logsRes] = await Promise.all([
+      const [dashboardRes, poolRes, usersRes, channelsRes, logsRes, rolesRes] = await Promise.all([
         API.get('/admin/dashboard'),
         API.get('/admin/pool'),
         API.get('/admin/users'),
         API.get('/admin/channels'),
-        API.get('/admin/audit')
+        API.get('/admin/audit'),
+        API.get('/admin/users/admin-roles').catch(() => ({ data: { data: [] } })),
       ]);
 
       setStats(dashboardRes.data.data || {});
@@ -390,6 +486,7 @@ const AdminConsole = () => {
       setUsers(usersRes.data.data || []);
       setChannels(channelsRes.data.data || []);
       setLogs(logsRes.data.data || []);
+      setAdminRoles(rolesRes.data.data || []);
     } catch (error) {
       console.error('Failed to fetch admin data:', error);
       Toast.error('获取数据失败');
@@ -410,9 +507,17 @@ const AdminConsole = () => {
 
   const handleAdjustBalance = async () => {
     try {
-      await API.post(`/admin/users/${selectedUserId}/adjust-balance`, {
-        amount: adjustAmount
-      });
+      const response = await retryWithTotpIfRequired(
+        (headers = undefined) => API.post(
+          `/admin/users/${selectedUserId}/adjust-balance`,
+          { amount: adjustAmount },
+          headers ? { headers } : undefined,
+        ),
+        '2FA 验证失败',
+      );
+      if (!response) {
+        return;
+      }
       Toast.success('余额已调整');
       setAdjustBalanceModalVisible(false);
       fetchData(false);
@@ -423,11 +528,40 @@ const AdminConsole = () => {
 
   const handleSetStatus = async () => {
     try {
-      await API.post(`/admin/users/${selectedUserId}/status`, {
-        status: newStatus
-      });
+      const response = await retryWithTotpIfRequired(
+        (headers = undefined) => API.post(
+          `/admin/users/${selectedUserId}/status`,
+          { status: newStatus },
+          headers ? { headers } : undefined,
+        ),
+        '2FA 验证失败',
+      );
+      if (!response) {
+        return;
+      }
       Toast.success('状态已更新');
       setSetStatusModalVisible(false);
+      fetchData(false);
+    } catch (error) {
+      Toast.error('操作失败');
+    }
+  };
+
+  const handleSetAdminRole = async () => {
+    try {
+      const response = await retryWithTotpIfRequired(
+        (headers = undefined) => API.post(
+          `/admin/users/${selectedUserId}/admin-role`,
+          { role: newRole },
+          headers ? { headers } : undefined,
+        ),
+        '2FA 验证失败',
+      );
+      if (!response) {
+        return;
+      }
+      Toast.success('管理角色已更新');
+      setSetRoleModalVisible(false);
       fetchData(false);
     } catch (error) {
       Toast.error('操作失败');
@@ -488,6 +622,23 @@ const AdminConsole = () => {
               setSelectedUserId(userId);
               setSetStatusModalVisible(true);
             }}
+            onSetRole={(userId, currentRole) => {
+              setSelectedUserId(userId);
+              setNewRole(currentRole || 'viewer');
+              setSetRoleModalVisible(true);
+            }}
+            loading={refreshing}
+          />
+        </TabPane>
+
+        <TabPane tab="管理员" itemKey="admins">
+          <AdminRolesCard
+            adminRoles={adminRoles}
+            onChangeRole={(userId, currentRole) => {
+              setSelectedUserId(userId);
+              setNewRole(currentRole || 'viewer');
+              setSetRoleModalVisible(true);
+            }}
             loading={refreshing}
           />
         </TabPane>
@@ -540,6 +691,27 @@ const AdminConsole = () => {
             <Select.Option value="banned">封禁</Select.Option>
           </Form.Select>
         </Form>
+      </Modal>
+
+      <Modal
+        title="设置管理角色"
+        visible={setRoleModalVisible}
+        onOk={handleSetAdminRole}
+        onCancel={() => setSetRoleModalVisible(false)}
+      >
+        <Form>
+          <Form.Select
+            field="admin_role"
+            label="管理角色"
+            value={newRole}
+            onChange={setNewRole}
+          >
+            <Select.Option value="super_admin">超级管理员</Select.Option>
+            <Select.Option value="operator">运维</Select.Option>
+            <Select.Option value="viewer">观察者</Select.Option>
+          </Form.Select>
+        </Form>
+        <Text type="secondary" size="small">此操作需要 2FA 验证</Text>
       </Modal>
     </div>
   );
