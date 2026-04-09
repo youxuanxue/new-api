@@ -11,19 +11,19 @@ build-frontend:
 
 start-backend:
 	@echo "Starting backend dev server..."
-	@cd $(BACKEND_DIR) && go run main.go &
+	@cd $(BACKEND_DIR) && go run . &
 
 # TT build (includes TT-specific features)
 build-tt:
 	@echo "Building TT version..."
-	@cd $(BACKEND_DIR) && go build -tags tt -o new-api-tt main.go
+	@cd $(BACKEND_DIR) && go build -tags tt -o new-api-tt .
 
 # Upstream build (clean, PR-ready)
 build-upstream:
 	@echo "Building upstream version..."
-	@cd $(BACKEND_DIR) && go build -o new-api main.go
+	@cd $(BACKEND_DIR) && go build -o new-api .
 
 # Run TT dev server
 dev-tt:
 	@echo "Starting TT dev server..."
-	@cd $(BACKEND_DIR) && go run -tags tt main.go
+	@cd $(BACKEND_DIR) && go run -tags tt .
