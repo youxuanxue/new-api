@@ -84,8 +84,12 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	logger.LogDebug(c, "streaming timeout seconds: %d", int64(streamingTimeout.Seconds()))
 	logger.LogDebug(c, "ping interval seconds: %d", int64(pingInterval.Seconds()))
 
+	workersStopped := false
 	// Inspect mutable stream state only after the workers have finished below.
 	defer func() {
+		if !workersStopped {
+			return
+		}
 		if info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors() {
 			logger.LogInfo(c, fmt.Sprintf("stream ended: %s", info.StreamStatus.Summary()))
 		} else {
@@ -102,12 +106,24 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			pingTicker.Stop()
 		}
 
-		// Closing the body unblocks Scan on cancellation/timeout. Join before the
-		// caller can reuse its Gin context or response writer for another attempt.
-		_ = resp.Body.Close()
-		wg.Wait()
-
-		close(stopChan)
+		if relaycommon.UpstreamRequestContextEnabled(c.Request.Context()) {
+			// Close Scan before joining, so a canceled attempt cannot retain its writer.
+			_ = resp.Body.Close()
+			wg.Wait()
+			workersStopped = true
+		} else {
+			done := make(chan struct{})
+			gopool.Go(func() { wg.Wait(); close(done) })
+			select {
+			case <-done:
+				workersStopped = true
+			case <-time.After(5 * time.Second):
+				logger.LogError(c, "timeout waiting for goroutines to exit")
+			}
+		}
+		if workersStopped {
+			close(stopChan)
+		}
 	}()
 
 	scanner.Split(bufio.ScanLines)

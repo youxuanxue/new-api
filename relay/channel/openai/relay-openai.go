@@ -10,7 +10,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/openrouter"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -191,7 +190,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 
 	// Caller-owned attempts must not turn an interrupted upstream into a synthetic
 	// successful terminal event. Preserve partial usage for the embedding gateway.
-	if channel.UpstreamRequestContextEnabled(c.Request.Context()) && !terminalReceived &&
+	if relaycommon.UpstreamRequestContextEnabled(c.Request.Context()) && !terminalReceived &&
 		(info.StreamStatus == nil || info.StreamStatus.EndReason != relaycommon.StreamEndReasonDone) {
 		return usage, nil
 	}

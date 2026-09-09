@@ -26,7 +26,7 @@ func TestCallerOwnedTransportContextIsOptIn(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		if enabled {
-			ctx = WithUpstreamRequestContext(ctx)
+			ctx = relaycommon.WithUpstreamRequestContext(ctx)
 		}
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader("{}")).WithContext(ctx)
@@ -57,7 +57,7 @@ func TestCallerOwnedTransportCancellationClosesResponseBody(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader("{}")).WithContext(WithUpstreamRequestContext(ctx))
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader("{}")).WithContext(relaycommon.WithUpstreamRequestContext(ctx))
 	req, err := http.NewRequest(http.MethodPost, server.URL, strings.NewReader("{}"))
 	require.NoError(t, err)
 	resp, err := DoRequest(c, req, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}})
