@@ -366,6 +366,27 @@ func TestRequestOpenAI2ClaudeMessage_ClaudeOpus48ThinkingUsesAdaptiveHighEffort(
 	require.Nil(t, claudeRequest.TopK)
 }
 
+
+func TestRequestOpenAI2ClaudeMessage_ReasoningEffortPinsTemperature(t *testing.T) {
+	request := dto.GeneralOpenAIRequest{
+		Model:           "claude-opus-5-5",
+		Temperature:     commonPointer(0.2),
+		TopP:            commonPointer(0.9),
+		ReasoningEffort: "high",
+		Messages: []dto.Message{
+			{Role: "user", Content: "hello"},
+		},
+	}
+
+	claudeRequest, err := RequestOpenAI2ClaudeMessage(nil, request)
+	require.NoError(t, err)
+	require.NotNil(t, claudeRequest.Thinking)
+	require.Equal(t, "enabled", claudeRequest.Thinking.Type)
+	require.NotNil(t, claudeRequest.Temperature)
+	require.InDelta(t, 1.0, *claudeRequest.Temperature, 1e-9)
+	require.Nil(t, claudeRequest.TopP)
+}
+
 func TestRequestOpenAI2ClaudeMessage_SupportsPDFFileContent(t *testing.T) {
 	request := dto.GeneralOpenAIRequest{
 		Model: "claude-3-5-sonnet",

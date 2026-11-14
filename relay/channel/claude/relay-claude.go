@@ -225,6 +225,12 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 				BudgetTokens: common.GetPointer[int](4096),
 			}
 		}
+		if claudeRequest.Thinking != nil {
+			// Extended thinking requires temperature=1 (or omitted). Mirror the
+			// "-thinking" suffix path so client sampling values do not 400.
+			claudeRequest.TopP = nil
+			claudeRequest.Temperature = common.GetPointer[float64](1.0)
+		}
 	}
 
 	// 指定了 reasoning 参数,覆盖 budgetTokens
@@ -240,6 +246,8 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 				Type:         "enabled",
 				BudgetTokens: &budgetTokens,
 			}
+			claudeRequest.TopP = nil
+			claudeRequest.Temperature = common.GetPointer[float64](1.0)
 		}
 	}
 
